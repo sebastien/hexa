@@ -1,4 +1,4 @@
-# Shape-directed pipelines: Python binding
+# Shape-directed pipelines: Python language binding
 
 Binds [spec-001](spec-001-shape_pipelines.md),
 [spec-004](spec-004-shape_pipelines_shapes.md) and
@@ -10,9 +10,13 @@ PascalCase stages and slots and camelCase data keys, by deliberate exception to 
 
 ## Modules
 
+The modules form the package `hexa`: `hexa.shapes`, `hexa.combinators` and
+`hexa.runtime`. The package has no dependencies, so libraries building on it, such
+as domain languages, may load it lazily and stay usable without it.
+
 | Module | Exports |
 | --- | --- |
-| `shapes.py` | Types, shape constructors, slots, codecs, `lossy` and `codes`, standard vocabulary, operations, `encode`, `decode`, `Failure`, `Gap`, `Issue` |
+| `shapes.py` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `Failure`, `Gap`, `Issue` |
 | `combinators.py` | Combinators, `Policy`, `backoff` |
 | `runtime.py` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
@@ -29,11 +33,19 @@ allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruf
 | `{k: S, k?: S}` | `{"k": S, "k?": S}` |
 | `{k: S, ...}` | `loose({"k": S})` |
 | `[S]`, `Tuple(A, B)` | `[S]`, `Tuple(A, B)` |
+| One ignored position, arbitrary rest | `Any`, `__` (shorthand for `rest(Any)`) |
+| Typed or captured tuple rest | `Tuple(Int, rest(Text), Text)`, `Tuple(Int, rest(Items.Values))` |
 | `A \| B` | `either(A, B)` |
 | `~"..."` | `pattern("...")` |
 | `S where C` | `S & C`, or `refine(S, C)`; custom: `S & where(is_even, "Even")` |
 | `$N.S via Codec` | `N.S @ Codec`, or `via(N.S, Codec)` |
+| `$N.S via Codec(Arg)` | `N.S @ DatePattern("YYYYMMDD")` |
+| `[$N.S]`, collection capture | `[N.S]`, `[N.S @ Codec]` |
+| `tolerant(S)` | `tolerant(S)` |
+| `gather($N.S)` | `gather(N.S)`, `gather(N.S @ Codec)` |
+| `parsed($N.S)` in a template | `parsed(N.S)` |
 | `$N.S?` in a template | `~N.S`, or `optional(N.S)` |
+| `Name($A, "x", G($B))` in a template | `derive(Name, A, "x", derive(G, B))` |
 | `Name(Param)` | `def RootBound(Root): return loose({...})`, used as `lambda env: RootBound(env.root)` |
 
 - `Text` matches `str`; `Bool` matches `bool` only. `Num` matches finite `int` or
@@ -48,6 +60,12 @@ allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruf
   holding `None` is a present null.
 - `List`, `[S]` and `Tuple(...)` match `list` values only; Python tuples are not JSON
   values. A list literal of any other length than one is rejected as a shape.
+- `Tuple` allows at most one `rest(S)`, consuming zero or more positions between
+  its fixed prefix and suffix. `__` is exported by `hexa.shapes` and encodes as
+  `{"$rest": "$Any"}`. A collection slot in `rest` captures the consumed items.
+- A template list or tuple with missing positions expands to an index map, for
+  example `{0: 10, 2: 30}` with a hole at `[1]`. JSON serialization writes the
+  index keys as strings. Complete containers remain lists.
 - `Any` and `List` are this library's shapes, not `typing.Any` / `typing.List`; do not
   import both into one module.
 - `where(predicate, code)` wraps a pure predicate as a named constraint. Standard
@@ -96,17 +114,36 @@ CrmClient = loose({"id": Client.Id, "countryName?": Client.Country @ CountryName
   never create slots.
 - Slot names are interned process-wide: redeclaring `Client.Id` with a different
   shape raises `Runtime.SlotRedeclared`.
-- `slot(QualifiedName, Shape)` creates a single slot; `Location` is exported.
-- `derive(Transform, *Slots)` applies a registered pure function:
+- `slots("Exchange.Instrument", Isin=Text)` declares a nested namespace: its
+  members are `Exchange.Instrument.Isin`. A namespace name is the full dotted
+  prefix; there is no parent object to declare first.
+- `slot(QualifiedName, Shape)` creates a single slot; `Location` and `Origin` are
+  exported.
+- `derive(Transform, *Arguments)` applies a transform. Arguments are slots, `~`
+  slots, literals or other `derive` values:
   `derive(PersonNameCompose, Client.GivenNames, Client.FamilyName)`.
+- `transform(Name, function, inputs=[...], output=Shape, gaps=[...],
+  examples=[...])` declares a transform; `function` takes the arguments
+  positionally and raises `Gap(Transform.Reason)` on failure.
+- `evidence(captures, slot)` returns `{"raw": ..., "location": ..., "codec": ...}`
+  (`codec` omitted for a plain capture) or `None`.
 - `codec(Name, source=, canonical=, parse=, format=, gaps=, losses=)` declares a code
   codec; `gaps` and `losses` are lists of reason names. `parse` and `format` are pure,
   raise `Gap(Codec.Reason)` on failure, and `parse` returns `lossy(value, Codec.Loss)`
-  for a lossy result.
-  `codec(Name, source=, canonical=, map=, gaps=)` declares a table: `map` is a dict
+  for a lossy result. `format(value, original=None)` receives the captured raw value
+  as `original` when there is one.
+- `codec(Name, source=, canonical=, map=, gaps=)` declares a table: `map` is a dict
   from canonical value to a source string or a list of them, the first formatting;
   `gaps` maps source strings to reason names, declaring the codes
   `CountryName.NotStated` etc.
+- `codec(Name, params={"Pattern": Text}, ...)` declares a parameterised codec. It
+  returns a codec family: calling it, `DatePattern("YYYYMMDD")`, checks the arguments
+  and returns an interned instance. `parse` and `format` receive the arguments as
+  leading positional parameters: `parse(pattern, value)`.
+- `examples=[...]` on `codec` and `transform` takes the spec-004 data form as dicts:
+  `{"input": "20260915", "output": "2026-09-15"}`,
+  `{"input": "2026-02-30", "gap": "Invalid"}`. Examples of a parameterised codec add
+  `"arguments": ["YYYYMMDD"]`.
 
 ## Enums and codes
 
@@ -116,6 +153,7 @@ Mortgage = codes("Mortgage", "RootMismatch")
 guard(lambda env: RootBound(env.root), Mortgage.RootMismatch)
 each(project(ClientRow, PersonRecord), Policy.Drop)
 each(project(ClientRow, PersonRecord), Policy.Drop, on=[Failure.Shape, Failure.Gap, Failure.Effect], target=Client)
+project(DividendRow, DividendRecord, outer=[Instrument.Isin], holes=Policy.Abort)
 ```
 
 - Enum members and codes are interned, hashable sentinels whose `repr` and `str` are
@@ -169,7 +207,12 @@ def MortgageDealsRetrieve(env, Id):
   `vocabulary`, `scope`) are read-only mappings read by key
   (`env.policy["maxGaps"]`); operation attributes return effect descriptions.
   Calling a stand-in operation outside a yield does nothing.
-- Pure helpers use snake_case, with a leading underscore when module-private.
+- Pure helpers use camelCase, with a leading underscore when module-private.
+  Classes and static methods use PascalCase; instance methods and fields use
+  camelCase. Canonical API and Python protocol names retain their exact spelling.
+- Implementation modules use tabs, a `Module: name — description` docstring,
+  future annotations, definitions before utilities and operations, high-level API
+  functions last, and an explicit `# EOF` marker.
 
 ### Stage namespaces
 
@@ -207,6 +250,10 @@ result learns its name; no frame inspection is involved.
   the class: `run(env, People.PeopleExtract)`, `People.MortgageRetrieve(env)`.
 
 ## Host environment
+
+`run` and `inert` accept a host-provided mapping. `run` validates and snapshots
+authority and configuration before exposing a frozen stand-in. `EnvironmentCreate`
+is an optional host-owned helper, not a required hexa API.
 
 ```python
 env = EnvironmentCreate(
@@ -294,6 +341,11 @@ Instructions and plain values resolve synchronously; only performed effects awai
 `join` and `race` run child scopes in an `asyncio.TaskGroup`, cancelling siblings on
 the first unrecovered failure. `_Scope`, `_is_effect` and `_is_instruction` are
 internal to `runtime.py`.
+
+Origins (spec-005 provenance) are kept in the scope as a dict from `id(container)`
+to `(container, origin)`. Holding the container keeps its `id` from being reused
+during the run; the dict is dropped with the scope. Marking walks a result once,
+when it is resumed into the stage.
 
 ## Example
 

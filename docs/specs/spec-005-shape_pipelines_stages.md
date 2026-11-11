@@ -94,7 +94,7 @@ Boundary stages declare contracts; internal hand-written stages may use a one-li
 | `stage(Name?, Contract?, S)` | as `S` | Contract, and a name for programmatic stages (above) |
 | `pipe(S1, S2, ...)` | `a → z` | Each output is the next input |
 | `lift(fn)` | `a → fn(a)` | A pure function as a stage |
-| `project(Shape, Template)` | `Value \| Occurrence → Value` | Capture, expand, report holes |
+| `project(Shape, Template, Options?)` | `Value \| Occurrence → Value` | Capture, join enclosing captures, expand, report holes. Options: `outer` (slots from enclosing capture blocks), `holes` (`Policy.Drop` or `Policy.Abort`) |
 | `guard(Shape \| (env → Shape), Code)` | `a → a` | Precondition; mismatch is a `Failure.Contract` with `Code`. A function builds a parameterised shape when the stage runs |
 | `select(Selector)` | `Value → [Occurrence]` | Enumerate; missing paths are gaps |
 | `each(S, Policy?, Options?)` | `[a] → [b]` | Per item, in order; the policy applies per item and `Policy.Drop` leaves items out |
@@ -198,7 +198,7 @@ runs to completion without suspension.
 
 | `Failure` | Raised by | Recoverable |
 | --- | --- | --- |
-| `Contract` | `guard`, `check`, `ensure`, authority or binding mismatches, invalid caller data | Never |
+| `Contract` | `guard`, `check`, authority mismatches, invalid caller data | Never |
 | `Budget` | `bound` and policy limits, including ledger size, attempts and concurrency | Never |
 | `Cancel` | The run's cancellation signal | Never; never retried |
 | `Defect` | Programming errors, failed output contracts, misbehaving codecs | Never |
@@ -223,8 +223,8 @@ runs to completion without suspension.
   a `Cancel`, and `T` in `always(S, T)` does not run.
 - A generator that yields while closing is the `Failure.Defect` `Runtime.CloseYielded`.
   Cleanup that needs effects is the host's responsibility, outside the cancelled run.
-- The rule is the same in every binding, so cleanup behaves identically whether the
-  language can resume a closing generator or not.
+- The rule is the same in every language binding, so cleanup behaves identically
+  whether the language can resume a closing generator or not.
 
 ### Policies
 
@@ -262,6 +262,22 @@ default to `Policy.Abort`. On a failure from `S`:
   handlers pass it through, as they pass exhausted retries.
 - `Failure.Effect` is handled only when listed in `on`: transport failures are
   retried with `retry`, not treated as bad data.
+
+Policies apply at three granularities, from finest to coarsest:
+
+| Granularity | Unit lost | Declared by |
+| --- | --- | --- |
+| Field | One template key (a hole) | `project(..., {holes: Policy.Drop})`, the default |
+| Item | One value of a list | `each` or `parallel` with `Policy.Drop` |
+| Run | Everything | `Policy.Abort`, or no policy |
+
+- Choose the finest unit whose loss leaves a correct output. Fields of independent
+  facts (attributes of a record) are dropped one by one; fields that only make sense
+  together belong to one derivation, so they succeed or fail as one.
+- A field hole is reported, never silent, with the same ledger entry an item drop
+  would make, at the field's path.
+- `{holes: Policy.Abort}` turns field holes into item failures, so the enclosing
+  `each` policy decides.
 
 ### Retry
 
@@ -320,6 +336,25 @@ it fails with a transient `Failure.Effect`, waiting `delay(attempt)` through
 - `always(S, T)` is the declarative way to publish partial results, such as a
   capture, when `S` fails.
 
+### Provenance
+
+Outputs can name the effect their data came from, without carrying source data.
+
+- The runtime marks every list and struct within a value returned at a yield (an
+  effect result, or a `join` or `race` result) with its origin: the effect's
+  `(strand, seq)` and the JSON Pointer of that container within the result. Marks are
+  kept by identity for the duration of the run and never change the value.
+- When a selector walks a value, the nearest marked container on the path gives the
+  occurrence's `origin`, extending its pointer by the remaining segments. In the
+  spec-001 example, `MortgageRetrieve` returns `{application: Application.data,
+  clients: Clients.data}`; the client list is the response's own list, so
+  `clients/0` has origin `{strand: "/Clients", seq: 0, pointer: "/data/0"}`.
+- Copies lose marks: a stage that rebuilds a container, and any scalar, has no
+  origin. Stages that must preserve provenance pass containers through unchanged.
+- Origins are recorded whether or not the run records a journal; they name journal
+  positions so that, when it does, an origin resolves to the response that held the
+  data. Replay reproduces the same origins.
+
 ### Strands and replay matching
 
 Concurrent strands complete in any order, so replay matches effects by their position
@@ -330,34 +365,45 @@ in the program, not by completion order.
   `/0`); the n-th `fork` of a strand appends `/@n`. Ids are therefore stable across
   runs. Struct keys of `join` and `race` must not begin with `@`. A handle joined or
   raced keeps its fork id; `parallel` forks one strand per item.
-- `seq` counts the effects a strand yields, from 0. Delegation (`yield*`,
-  `yield from`) and combinators stay in the same strand.
+- `seq` counts performed effects from 0, including every retry attempt and
+  `DelayWait`. `attempt` is metadata, not part of the replay lookup key.
+  Delegation (`yield*`, `yield from`) and combinators stay in the same strand.
+  Counters are run-local and continuous per strand path: successive `join` or
+  `race` groups reusing a key continue the child's sequence. Overlapping reuse of
+  an active child path is the defect `Runtime.StrandConflict`.
 - Replay answers each yielded effect with the entry for its `(strand, seq)`, after
   checking that `operation` and `arguments` are equal as JSON. A missing entry or a
   difference is the `Failure.Defect` `Runtime.ReplayMismatch`.
 - A recorded `failure` is raised again with its kind and code; a `cancelled` entry
   marks a strand that lost a `race` or was cancelled by a sibling, and replay cancels
   that strand at the same point. A `race` therefore has the recorded winner.
-- A journal fixture is valid for every binding: strand ids, `seq` and arguments never
-  depend on scheduling.
+- A journal fixture is valid for every language binding: strand ids, `seq` and
+  arguments never depend on scheduling.
+
+**Open:** when two `race` alternatives finish successfully before the runtime can
+cancel the loser, neither entry is necessarily cancelled. The journal needs a
+specified winner representation for exact replay of that case. Completion index
+is informational, not a replacement for an explicit winner rule.
 
 ## Environment
 
 The environment carries `root`, `scope`, `vocabulary`, `policy`, operations, and
 per-run options `signal`, `replay` and `record`.
 
-- A host factory (`EnvironmentCreate`) validates and snapshots authority, vocabulary
-  and policy. Caller input is never spread or merged into the environment.
-- Per-run options may be overlaid; authority or policy changes go through the factory
-  again. The environment is read-only during a run.
+- The runtime accepts a host-provided mapping, validates and snapshots authority,
+  vocabulary and policy, and exposes a frozen stand-in. A host factory
+  (`EnvironmentCreate`) is optional, not a required library API. Caller input is
+  never spread or merged into the environment.
+- Per-run options may be overlaid; authority or policy changes require a fresh
+  validated snapshot. The environment is read-only during a run.
 - `env.policy` is host configuration: budgets and allow-lists, `contracts` (a `Checks`
   member), `retry`, `maxAttempts`,
   `maxGaps` and `maxConcurrency`.
 - Operations are named Subject + Verb and may return values or promises. Each has a
   default, either a no-op or a failure. Stages see them only through the stand-in.
 - The vocabulary registers types, constraints, derivations, transforms and codecs by
-  name, each pure and with a declared signature. It is what `CatalogDescribe`
-  presents to callers.
+  name, each pure and with a declared signature and, for codecs and derivations,
+  examples (spec-004). It is what `CatalogDescribe` presents to callers.
 
 ## Accumulators
 
@@ -377,7 +423,7 @@ accumulators, created by `fold` or by a hand-written owner.
 | Boundary | Required |
 | --- | --- |
 | Caller → pipeline | Data-only check (JSON, acyclic, bounded, no prototype keys), decoding under a profile, then `guard` |
-| Effect → pipeline | Response shape, budget and binding checks: is this the data that was requested? |
+| Effect → pipeline | Response shape, budget and authority checks: is this the data that was requested? |
 | Pipeline → host | `tap` with a detached copy |
 | Pipeline → caller | Whitelisted projection; ledger details, journal and evidence only on explicit host disclosure |
 
@@ -389,4 +435,3 @@ accumulators, created by `fold` or by a hand-written owner.
   and asserting on the effect descriptions they yield; test pipelines by replaying
   journals.
 - Assert on kinds, codes and paths as members, never message text.
-

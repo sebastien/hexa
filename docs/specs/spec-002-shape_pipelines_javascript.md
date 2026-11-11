@@ -1,4 +1,4 @@
-# Shape-directed pipelines: JavaScript binding
+# Shape-directed pipelines: JavaScript language binding
 
 Binds [spec-001](spec-001-shape_pipelines.md),
 [spec-004](spec-004-shape_pipelines_shapes.md) and
@@ -10,9 +10,14 @@ dependencies and no Node/Bun imports in library modules. The
 
 ## Modules
 
+The modules form the package `hexa`, imported as `hexa/shapes.js`,
+`hexa/combinators.js` and `hexa/runtime.js`. The package has no dependencies, so
+libraries building on it may load it lazily with `import()` and stay usable
+without it.
+
 | Module | Exports |
 | --- | --- |
-| `shapes.js` | Types, shape constructors, slots, codecs, `lossy` and `codes`, standard vocabulary, operations, `encode`, `decode`, `Failure`, `Gap`, `Issue` |
+| `shapes.js` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `Failure`, `Gap`, `Issue` |
 | `combinators.js` | Combinators, `Policy`, `backoff` |
 | `runtime.js` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
@@ -30,6 +35,11 @@ Import canonical names unchanged; never rename on import.
 | `A \| B` | `either(A, B)` |
 | `~"..."` | `pattern("...")` |
 | `S where C` | `refine(S, C)`; custom: `refine(S, where(isEven, "Even"))` |
+| `$N.S via Codec(Arg)` | `via(N.S, DatePattern("YYYYMMDD"))` |
+| `[$N.S]`, collection capture | `[N.S]`, `[via(N.S, Codec)]` |
+| `tolerant(S)` | `tolerant(S)` |
+| `gather($N.S)` | `gather(N.S)`, `gather(via(N.S, Codec))` |
+| `parsed($N.S)` in a template | `parsed(N.S)` |
 | `Name(Param)` | `const RootBound = Root => loose({ ... })`, used as `env => RootBound(env.root)` |
 
 - `Text` matches primitive strings; `Num` finite numbers; `Int` values passing
@@ -74,18 +84,35 @@ const CrmClient = loose({ id: Client.Id, "countryName?": via(Client.Country, Cou
   or serialised by accident.
 - Slot names are interned process-wide: redeclaring `Client.Id` with a different
   shape throws `Runtime.SlotRedeclared`.
-- `slot(QualifiedName, Shape)` creates a single slot; `Location` is exported.
+- `slots("Exchange.Instrument", { Isin: Text })` declares a nested namespace: its
+  members are `Exchange.Instrument.Isin`. A namespace name is the full dotted
+  prefix; there is no parent object to declare first.
+- `slot(QualifiedName, Shape)` creates a single slot; `Location` and `Origin` are
+  exported.
 - In templates, `optional(Slot)` marks an expected absence and `via(Slot, Codec)`
-  formats the canonical value. `derive(Transform, ...Slots)` applies a registered
-  pure function to captured values:
-  `derive(PersonNameCompose, Client.GivenNames, Client.FamilyName)`.
+  formats the canonical value. `derive(Transform, ...Arguments)` applies a
+  transform; arguments are slots, `optional` slots, literals or other `derive`
+  values: `derive(PersonNameCompose, Client.GivenNames, Client.FamilyName)`.
+- `transform(Name, fn, { inputs, output, gaps?, examples? })` declares a
+  transform; `fn` takes the arguments positionally and throws
+  `new Gap(Transform.Reason)` on failure.
+- `evidence(captures, slot)` returns `{ raw, location, codec? }` or `null`.
 - `codec(Name, { source, canonical, parse, format, gaps?, losses? })` declares a code
   codec; `gaps` and `losses` are arrays of reason names. `parse` and `format` are pure,
   throw `new Gap(Codec.Reason)` on failure, and `parse` returns
-  `lossy(value, Codec.Loss)` for a lossy result. `codec(Name, { source,
-  canonical, map, gaps? })` declares a table: `map` is an object from canonical value
+  `lossy(value, Codec.Loss)` for a lossy result. `format(value, original)` receives
+  the captured raw value as `original` when there is one, and `undefined` otherwise.
+- `codec(Name, { source, canonical, map, gaps? })` declares a table: `map` is an object from canonical value
   to a source string or a list of them, the first formatting; `gaps` maps source
   strings to reason names, declaring the codes `CountryName.NotStated` etc.
+- `codec(Name, { params: { Pattern: Text }, ... })` declares a parameterised codec.
+  It returns a codec family: calling it, `DatePattern("YYYYMMDD")`, checks the
+  arguments and returns an interned instance. `parse` and `format` receive the
+  arguments as leading parameters: `parse(pattern, value)`.
+- `examples: [...]` on `codec` and `transform` takes the spec-004 data form:
+  `{ input: "20260915", output: "2026-09-15" }`,
+  `{ input: "2026-02-30", gap: "Invalid" }`; examples of a parameterised codec add
+  `arguments: ["YYYYMMDD"]`.
 
 ## Enums and codes
 
@@ -95,6 +122,7 @@ const Mortgage = codes("Mortgage", "RootMismatch");
 guard(env => RootBound(env.root), Mortgage.RootMismatch);
 each(project(ClientRow, PersonRecord), Policy.Drop);
 each(project(ClientRow, PersonRecord), Policy.Drop, { on: [Failure.Shape, Failure.Gap, Failure.Effect], target: Client });
+project(DividendRow, DividendRecord, { outer: [Instrument.Isin], holes: Policy.Abort });
 ```
 
 - Enum members and codes are interned symbols, `Symbol.for("member:Failure.Gap")`,
@@ -265,6 +293,10 @@ Instructions and plain values resolve synchronously; only performed effects awai
 `join` and `race` use `Promise.allSettled` / `Promise.race` over child scopes, each
 with an `AbortController` derived from the strand's signal. `Scope`, `isEffect` and
 `isInstruction` are internal to `runtime.js`.
+
+Origins (spec-005 provenance) are kept in a `WeakMap` from container to origin,
+owned by the run's scope. Marking walks a result once, when it is resumed into the
+stage.
 
 ## Example
 

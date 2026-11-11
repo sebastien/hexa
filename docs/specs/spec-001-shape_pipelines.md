@@ -15,13 +15,13 @@ defined in [spec-004](spec-004-shape_pipelines_shapes.md), and naming in
 
 | Spec | Covers |
 | --- | --- |
-| spec-001 (this) | Concepts, naming, data and configuration, enums and codes, binding rules, example |
+| spec-001 (this) | Concepts, naming, data and configuration, enums and codes, language binding rules, example |
 | [spec-004](spec-004-shape_pipelines_shapes.md) | Shapes, slots, codecs, selectors, templates and projection, encoding and profiles |
 | [spec-005](spec-005-shape_pipelines_stages.md) | Stages, combinators, effects and concurrency, failures and policies, tracing, environment, testing |
-| [spec-002](spec-002-shape_pipelines_javascript.md), [spec-003](spec-003-shape_pipelines_python.md) | JavaScript and Python bindings |
+| [spec-002](spec-002-shape_pipelines_javascript.md), [spec-003](spec-003-shape_pipelines_python.md) | JavaScript and Python language bindings |
 
 spec-001, spec-004 and spec-005 are language-agnostic and together define the
-canonical names; the bindings add syntax only.
+canonical names; the language bindings add syntax only.
 
 ## Concepts and approach
 
@@ -36,7 +36,11 @@ canonical names; the bindings add syntax only.
   expands into a fresh value. A shape whose leaves are slots and literals is also a
   template.
 - **Projection:** a shape and a template read as one function: extract, normalise,
-  reproject. It need not be lossless or total.
+  reproject. It need not be lossless or total. Domain languages built on this style
+  (for example onto's bindings and mappings) give projection narrower meanings and
+  compile to these projections.
+- **Origin:** where an occurrence's data came from: an effect's journal position and
+  a pointer within its result. Value-free, so outputs may carry it.
 - **Stage:** a generator `Name(env, input, ...) → output` whose contract is a pair of
   shapes.
 - **Combinator:** a function returning a stage: `pipe`, `each`, `project`, `recover`,
@@ -54,7 +58,8 @@ canonical names; the bindings add syntax only.
 - **Policy:** a declared response to recoverable failures: `Policy.Abort`,
   `Policy.Drop`, `Policy.Substitute(Value)` or `Policy.Fallback(Stage)`.
 - **Gap:** an expected absence: unsupplied, inadmissible, unmappable or unparseable
-  data. A gap is reported, never returned as a value.
+  data. A gap is reported, never returned as a value. A gap in one template field is
+  a hole: the field is left out and the rest of the value kept.
 - **Ledger:** the run-local record of gaps and losses; summarised as coverage.
 - **Journal:** the optional record of performed effects and their results; valid
   replay input.
@@ -84,7 +89,7 @@ qualifier last, so related names sort together.
 
 - Everything a program names is PascalCase: slots, stages, shapes, codecs,
   operations, codes and enum members (`Failure.Gap`, `Policy.Drop`).
-- Keys of data structures the spec defines are camelCase in every binding: policies,
+- Keys of data structures the spec defines are camelCase in every language binding: policies,
   ledger entries, failures, effects, options and the environment (`kind`, `code`,
   `maxGaps`, `env.root`).
 - The namespace prefix is included when a name must be unique beyond its module.
@@ -130,7 +135,7 @@ representation.
 | `Issue` | `Mismatch`, `Missing`, `Unexpected`, `Constraint`, `CaptureConflict` |
 | `Coverage` | `Supplied`, `SourceNull`, `NotSupplied`, `Unmapped`, `Conflicting` |
 | `Checks` | `Boundary`, `All`, `Off` |
-| `Runtime` | `CloseYielded`, `MemberUnknown`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined` |
+| `Runtime` | `CloseYielded`, `MemberUnknown`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict` |
 
 ### Codes
 
@@ -144,18 +149,19 @@ Mortgage = codes {RootMismatch}
   of its own codes: `CountryName.Unmapped`, `CountryName.Unformattable` and the
   reasons its `gaps` declare. `InstantOffset.Discarded` is a loss reason.
 
-## Bindings
+## Language bindings
 
-Bindings implement this specification without renaming it. A program reads the same
-in every binding apart from syntax.
+A language binding implements this specification in one programming language
+(spec-002, spec-003), without renaming it. A program reads the same in every
+language binding apart from syntax. Below, "binding" always means a language binding.
 
 | Group | Canonical names |
 | --- | --- |
 | Types | `Any`, `Text`, `Num`, `Int`, `Float`, `Bool`, `Null`, `Struct`, `List`, `DateTime`, `Instant`, `Decimal` |
-| Shape constructors | `Tuple`, `loose`, `either`, `refine`, `where`, `pattern`, `nullable` |
-| Slots, codecs and codes | `slots`, `slot`, `via`, `optional`, `derive`, `codec`, `lossy`, `codes`, `Location` |
-| Standard vocabulary | `DateOnly`, `Timed`, `Zoned`, `Positive`, `Nonempty`, `parts`, `InstantOffset`, `DecimalText` |
-| Operations | `errors`, `check`, `ensure`, `capture`, `expand`, `reshape`, `matches`, `encode`, `decode` |
+| Shape constructors | `Tuple`, `rest`, `loose`, `either`, `refine`, `where`, `pattern`, `nullable`, `tolerant`, `gather` |
+| Slots, codecs and codes | `slots`, `slot`, `via`, `optional`, `derive`, `codec`, `transform`, `lossy`, `codes`, `Location`, `Origin` |
+| Standard vocabulary | `DateOnly`, `Timed`, `Zoned`, `Positive`, `Nonempty`, `parts`, `InstantOffset`, `DecimalText`, `DatePattern` |
+| Operations | `errors`, `check`, `capture`, `expand`, `reshape`, `matches`, `evidence`, `parsed`, `encode`, `decode` |
 | Combinators | `stages`, `stage`, `pipe`, `lift`, `project`, `guard`, `select`, `each`, `parallel`, `choose`, `when`, `otherwise`, `admit`, `fold`, `tap`, `bound`, `recover`, `retry`, `always`, `collect` |
 | Policy helpers | `backoff` |
 | Runtime | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p` |
@@ -228,5 +234,5 @@ without `firstName` is dropped and reported against `MortgageClientsProject`; a 
 without `countryOfBirth` keeps the row and omits `Country`, with no report; an
 unmapped country name reports `CountryName.Unmapped` and drops the row. The root
 check aborts because the root binds authority.
-[`examples/mortgage-people`](examples/README.md) holds both bindings of this example
+[`examples/mortgage-people`](examples/README.md) holds both language bindings of this example
 with shared fixtures.

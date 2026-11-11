@@ -16,9 +16,11 @@ The style is specified in `docs/specs/` of this repository. This skill gives the
 | Python 3.14+ syntax | [spec-003](../../spec-003-shape_pipelines_python.md) |
 | A complete program with fixtures | [examples/mortgage-people](../../examples/README.md) |
 
-**The libraries (`shapes`, `combinators`, `runtime`) do not exist yet.** Code in this
-style can be syntax-checked (`node --check`, `ast.parse` on Python 3.14+) but not run.
-Say so whenever you present such code, and never claim it was tested.
+**Python has an experimental implementation** in `hexa.shapes`,
+`hexa.combinators` and `hexa.runtime`, tested with `python3 -m unittest discover`.
+JavaScript remains syntax-only (`node --check`) until its binding exists. Report
+which binding and tests were actually exercised; do not claim full draft-spec
+conformance from syntax checks or the initial fixture suite.
 
 ## Workflow
 
@@ -27,8 +29,9 @@ Say so whenever you present such code, and never claim it was tested.
 2. **Slots.** Declare one slot namespace per subject with each slot's *canonical*
    shape: `Client = slots {Id: Int where Positive, …}`.
 3. **Codecs.** For each source format that differs from the canonical shape, pick a
-   standard codec (`InstantOffset`, `DecimalText`), a table codec (text only) or a
-   code codec. Conversion happens nowhere else.
+   standard codec (`InstantOffset`, `DecimalText`, `DatePattern("…")`), a table codec
+   (text only) or a code codec. Conversion happens nowhere else. Give code codecs and
+   transforms examples.
 4. **Source shapes.** Describe each source occurrence with slots at the positions
    they occupy, `via Codec` where the format differs. Loose (`...`) only where the
    source legitimately carries extra keys.
@@ -71,7 +74,7 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
   SourceFormat` (`CountryName`, `InstantOffset`); operations `Subject Verb`
   (`RequestSend`, `DelayWait`).
 - Pure helpers are not stages: no `env`, no `yield`, language-native naming
-  (camelCase in JS, snake_case in Python).
+  (camelCase in JS and Python).
 
 ### Shapes and slots
 
@@ -85,8 +88,19 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
 - In templates, `$S?` (`optional`, Python `~`) marks an expected absence. A plain
   reference that is unbound is a hole and `project` reports it as a gap. A slot captured
   only in some union branches must be referenced as optional.
+- A failed derivation or format is also a hole: the key is dropped, the rest of the
+  value kept. Use `{holes: Policy.Abort}` when a record is wrong without every field.
+- `tolerant(S)` only for loosely typed sources of independent fields: a value that
+  does not match or parse becomes a hole for the template keys that use it. Never
+  wrap a whole record in it.
+- Collect a field from every list item with `gather($N.S)` into a collection slot;
+  `[$N.S]` is the same for a list of scalars.
+- Nested records read parent fields through a capture block in the selector
+  (`items/*/{id?:$Order.Id}/lines/*`) and `project(…, {outer: [Order.Id]})`, never
+  by passing the parent around.
 - `$Location` binds the occurrence's JSON Pointer; issue and ledger `path`s are key
-  lists relative to it.
+  lists relative to it. `$Origin` binds the effect it came from, when known; pass
+  effect results through unchanged to keep it.
 
 ### Codecs
 
@@ -95,9 +109,10 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
 - Unlisted source is `<Codec>.Unmapped`; unlisted canonical is
   `<Codec>.Unformattable`. Never map to `Other`, `Unknown` or a default; declare a gap
   reason instead (`gaps: {Unknown: "NotStated"}`).
-- Code codecs: pure `parse`/`format` of one value; raise `Gap(Codec.Reason)`; return
-  `lossy(value, Codec.Reason)` for lossy parses; declare every reason in `gaps` or
-  `losses`.
+- Code codecs: pure `parse`/`format` (plus literal parameters, for families such as
+  `DatePattern`); raise `Gap(Codec.Reason)`; return `lossy(value, Codec.Reason)` for
+  lossy parses; declare every reason in `gaps` or `losses`. `format` may return its
+  `original` argument to keep the source spelling.
 
 ### Stages and effects
 
@@ -147,7 +162,7 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
 - Report gaps and losses with `yield report(Ledger.Gap, {target, reason, …})`.
   `collect(S)` returns `{value, ledger}`; `run` returns the output only.
 
-## Binding cheat-sheet
+## Language binding cheat-sheet
 
 | Notation | JavaScript | Python |
 | --- | --- | --- |
@@ -156,6 +171,7 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
 | `A \| B` | `either(A, B)` | `either(A, B)` (never `\|`) |
 | `S where C` | `refine(S, C)` | `S & C` |
 | `$N.S via Codec` | `via(N.S, Codec)` | `N.S @ Codec` |
+| `Name($A, "x")` (template) | `derive(Name, A, "x")` | `derive(Name, A, "x")` |
 | `$N.S?` (template) | `optional(N.S)` | `~N.S` |
 | Options | option object `{ on, target }` | keyword arguments `on=…, target=…` |
 | Stage namespace | `stages(S => ({ *X(env) {…}, Y: S1, Z: pipe(S.X, S.Y) }))` | `class N(stages):` with `def X(env):`, `Y = S1`, `Z = pipe(X, Y)` |
@@ -225,6 +241,7 @@ class People(stages):
       `fromisoformat` or `Decimal(…)` in stages.
 - [ ] Struct strictness is deliberate; `key?` and `| Null` used for what they mean.
 - [ ] Optional template references only where absence is expected; other holes report.
+- [ ] `tolerant` only around single fields, and `holes` policy chosen deliberately.
 - [ ] Table codecs have no default/`Other` mapping; reasons are declared.
 - [ ] Stages yield effects for all I/O, use `p` for paths, and never await natively.
 - [ ] Authority checks (`guard` against `env.root`) abort; source-data problems are
@@ -240,7 +257,7 @@ class People(stages):
 Do not invent answers for these; flag them:
 
 - Profile format and compiling selections/relations requests (spec-004, deferred).
-- Effect provenance for locations (locations point into the value given to `select`).
+- Index access (`a[0]`) in selectors or shapes (spec-004, open).
 - Logical traces across native delegation need explicit instrumentation.
 - Encodings cover registered names only, never closures, handles or signals.
 - `SlotRedeclared` needs stable shape equality, not object identity.
