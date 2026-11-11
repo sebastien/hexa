@@ -1,0 +1,18 @@
+{
+  "ClientRow": {"$loose": {
+    "id": "$Client.Id",
+    "basicDetails": {"$loose": {
+      "firstName": "$Client.GivenNames",
+      "lastName": "$Client.FamilyName",
+      "dateOfBirth?": "$Client.BirthDate",
+      "countryOfBirth?": {"$": "Client.Country", "via": "CountryName"}
+    }}
+  }},
+  "PersonRecord": {
+    "GivenNames": "$Client.GivenNames",
+    "FamilyName": "$Client.FamilyName",
+    "BirthDate": {"$": "Client.BirthDate", "optional": true},
+    "Country": {"$": "Client.Country", "optional": true},
+    "Source": "$Location"
+  }
+}

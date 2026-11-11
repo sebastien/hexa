@@ -1,0 +1,11 @@
+{
+  "value": [
+    {"GivenNames": "Aroha", "FamilyName": "Ngata", "BirthDate": "1985-03-14", "Country": "NZ", "Source": "/clients/0"},
+    {"GivenNames": "Ben", "FamilyName": "Carter", "BirthDate": null, "Source": "/clients/2"}
+  ],
+  "ledger": [
+    {"kind": "Gap", "target": "MortgageClientsProject", "reason": "Issue.Missing", "source": "/clients/1", "path": ["basicDetails", "firstName"]},
+    {"kind": "Gap", "target": "MortgageClientsProject", "reason": "CountryName.Unmapped", "source": "/clients/3", "path": ["basicDetails", "countryOfBirth"]},
+    {"kind": "Gap", "target": "MortgageClientsProject", "reason": "Issue.Constraint", "source": "/clients/4", "path": ["id"]}
+  ]
+}

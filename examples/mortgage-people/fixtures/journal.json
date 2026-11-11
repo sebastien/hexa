@@ -1,0 +1,14 @@
+[
+  {"index": 0, "strand": "/Clients", "seq": 0, "attempt": 1, "operation": "RequestSend",
+   "arguments": [{"method": "GET", "path": "/mortgages/42/clients"}],
+   "result": {"data": [
+     {"id": 7, "basicDetails": {"firstName": "Aroha", "lastName": "Ngata", "dateOfBirth": "1985-03-14", "countryOfBirth": "Aotearoa New Zealand"}},
+     {"id": 8, "basicDetails": {"lastName": "Hughes", "countryOfBirth": "Australia"}},
+     {"id": 9, "basicDetails": {"firstName": "Ben", "lastName": "Carter", "dateOfBirth": null, "email": "ben@example.test"}},
+     {"id": 10, "basicDetails": {"firstName": "Mere", "lastName": "Tane", "countryOfBirth": "Narnia"}},
+     {"id": -3, "basicDetails": {"firstName": "Sam", "lastName": "Lee"}}
+   ]}},
+  {"index": 1, "strand": "/Application", "seq": 0, "attempt": 1, "operation": "RequestSend",
+   "arguments": [{"method": "GET", "path": "/mortgages/42"}],
+   "result": {"data": {"id": 42, "status": "Active"}}}
+]

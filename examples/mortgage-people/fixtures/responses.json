@@ -1,0 +1,10 @@
+{
+  "/mortgages/42": {"data": {"id": 42, "status": "Active"}},
+  "/mortgages/42/clients": {"data": [
+    {"id": 7, "basicDetails": {"firstName": "Aroha", "lastName": "Ngata", "dateOfBirth": "1985-03-14", "countryOfBirth": "Aotearoa New Zealand"}},
+    {"id": 8, "basicDetails": {"lastName": "Hughes", "countryOfBirth": "Australia"}},
+    {"id": 9, "basicDetails": {"firstName": "Ben", "lastName": "Carter", "dateOfBirth": null, "email": "ben@example.test"}},
+    {"id": 10, "basicDetails": {"firstName": "Mere", "lastName": "Tane", "countryOfBirth": "Narnia"}},
+    {"id": -3, "basicDetails": {"firstName": "Sam", "lastName": "Lee"}}
+  ]}
+}
