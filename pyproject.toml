@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hexa"
+name = "hexa-pipelines"
 version = "0.1.0"
 description = "Shape-directed pipelines with inert effects and replay"
 requires-python = ">=3.14"
