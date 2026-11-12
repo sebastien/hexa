@@ -225,7 +225,7 @@ class People(stages):
 ## Testing
 
 - Drive a hand-written stage with `inert(env)` and assert on the yielded effect or
-  instruction descriptions; they compare equal as data.
+  instruction descriptions; they compare equal by value.
 - Replay a recorded journal (`env.replay`) for pipelines: effects match by
   `(strand, seq)`, so one journal is valid in both bindings.
 - Keep fixtures as data: `responses.json` (transport fake), `expected.json`

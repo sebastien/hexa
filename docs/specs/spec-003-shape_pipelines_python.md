@@ -20,6 +20,11 @@ as domain languages, may load it lazily and stay usable without it.
 | `combinators.py` | Combinators, `Policy`, `backoff` |
 | `runtime.py` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
+`shapes.py` is a façade over the internal modules `shape` (algebra and matching),
+`template`, `codec`, `selector`, `encoding` and `vocabulary`; `combinators.py` and
+`runtime.py` build on `stage` and `instructions`. Programs import only the three
+public modules.
+
 Import canonical names unchanged; never rename on import. Configure linters to
 allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruff
 `N802`, `N803`, `N806`).
@@ -206,8 +211,10 @@ def MortgageDealsRetrieve(env, Id):
 - The runtime passes a frozen stand-in as `env`. Data attributes (`root`, `policy`,
   `vocabulary`, `scope`) are read-only mappings read by key
   (`env.policy["maxGaps"]`); operation attributes return effect descriptions.
+  `env.strand` is the runtime's handle on the executing strand; stages never use it.
   Calling a stand-in operation outside a yield does nothing.
-- Pure helpers use camelCase, with a leading underscore when module-private.
+- Pure helpers use camelCase without a leading underscore; `__all__` declares each
+  module's exports.
   Classes and static methods use PascalCase; instance methods and fields use
   camelCase. Canonical API and Python protocol names retain their exact spelling.
 - Implementation modules use tabs, a `Module: name — description` docstring,
@@ -304,8 +311,8 @@ class Gap(Failure):
 ## Runtime
 
 ```python
-async def _drive(it, scope):
-    """Drive one strand: effects and instructions go to `scope`, plain values return."""
+async def drive(it, strand):
+    """Drive one strand: effects and instructions go to `strand`, plain values return."""
     send, error = None, None
     try:
         while True:
@@ -317,10 +324,10 @@ async def _drive(it, scope):
             try:
                 if inspect.isawaitable(yielded):
                     raise Failure(Failure.Defect, Runtime.NativeAwaitable)
-                result = scope.perform(yielded) if _is_effect(yielded) or _is_instruction(yielded) else yielded
+                result = strand.perform(yielded)   # effect and instruction records act; other values pass through
                 send = (await result) if inspect.isawaitable(result) else result
             except Exception as caught:
-                error = scope.classify(caught)
+                error = strand.classify(caught)
                 if error.kind is Failure.Cancel:
                     raise error   # closed below, never thrown in
     finally:
@@ -329,22 +336,27 @@ async def _drive(it, scope):
         except RuntimeError:
             raise Failure(Failure.Defect, Runtime.CloseYielded)
 
-async def run(env, Stage, *inputs):
-    scope = _Scope(env)   # stand-in env, ledger, journal, budgets, trace, strands
+async def run(env, stage, *inputs):
+    strand = Strand(Run(env))   # Run: authority, budgets, journal, replay; Strand: stack, ledger, signal
     try:
-        return await _drive(Stage(scope.env, *inputs), scope)
+        return await drive(stage(strand.env, *inputs), strand)
     except Failure as failure:
-        raise scope.attach(failure)
+        raise strand.attach(failure)
 ```
 
 Instructions and plain values resolve synchronously; only performed effects await.
-`join` and `race` run child scopes in an `asyncio.TaskGroup`, cancelling siblings on
-the first unrecovered failure. `_Scope`, `_is_effect` and `_is_instruction` are
-internal to `runtime.py`.
+`join` and `race` run child strands in an `asyncio.TaskGroup`. Live joins cancel
+siblings on the first unrecovered failure; live races cancel remaining participants
+after their first completion. Replay drains recorded participant work, including
+nested joins, and uses explicit per-strand race-ordinal decisions rather than task
+completion order. These decisions do not consume effect `seq`. `Run`, `Strand` and
+the instruction records (`Effect`,
+`Report`, `LedgerRead`, `Join`, `Race`, `Fork`, `Parallel`) are internal, absent from
+every `__all__`.
 
-Origins (spec-005 provenance) are kept in the scope as a dict from `id(container)`
+Origins (spec-005 provenance) are kept in the run as a dict from `id(container)`
 to `(container, origin)`. Holding the container keeps its `id` from being reused
-during the run; the dict is dropped with the scope. Marking walks a result once,
+during the run; the dict is dropped with the run. Marking walks a result once,
 when it is resumed into the stage.
 
 ## Example

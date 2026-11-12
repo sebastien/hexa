@@ -61,8 +61,8 @@ canonical names; the language bindings add syntax only.
   data. A gap is reported, never returned as a value. A gap in one template field is
   a hole: the field is left out and the rest of the value kept.
 - **Ledger:** the run-local record of gaps and losses; summarised as coverage.
-- **Journal:** the optional record of performed effects and their results; valid
-  replay input.
+- **Journal:** the optional record of performed effects, their results and explicit
+  runtime decisions such as race selections; valid replay input.
 - **Vocabulary:** host-registered types, constraints, derivations, transforms and
   codecs, referenced by name. The extension point for hard-to-express transforms.
 
@@ -124,6 +124,10 @@ representation.
   program entities holds the qualified or declared name (`reason: "Issue.Missing"`,
   `target: "MortgageClientsProject"`). In encoded programs, members are references
   (`"$Policy.Drop"`), and `decode` maps them back through the registry.
+- The registry holds each declared name once: types, slots and slot namespaces, codes,
+  codecs, transforms, constraints and named stages. Redeclaring a name with an equal
+  value returns the existing one; a different value is the `Failure.Defect`
+  `Runtime.NameRedeclared`. Unnamed helper stages are never registered.
 
 ### Library enums
 
@@ -134,8 +138,8 @@ representation.
 | `Ledger` | `Gap`, `Loss` |
 | `Issue` | `Mismatch`, `Missing`, `Unexpected`, `Constraint`, `CaptureConflict` |
 | `Coverage` | `Supplied`, `SourceNull`, `NotSupplied`, `Unmapped`, `Conflicting` |
-| `Checks` | `Boundary`, `All`, `Off` |
-| `Runtime` | `CloseYielded`, `MemberUnknown`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict` |
+| `Checks` | `Boundary`, `Off` |
+| `Runtime` | `CloseYielded`, `MemberUnknown`, `NameRedeclared`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict` |
 
 ### Codes
 

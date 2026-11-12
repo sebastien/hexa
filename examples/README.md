@@ -1,11 +1,14 @@
 # Examples
 
-Programs written against the proposed libraries of
-[spec-002](../spec-002-shape_pipelines_javascript.md) (JavaScript) and
-[spec-003](../spec-003-shape_pipelines_python.md) (Python). **The libraries do not
-exist yet, so nothing here runs.** Imports name the binding modules as if they sat
-beside each program. The files are checked for syntax only; the fixtures are the
-intended cross-language conformance cases once the libraries exist.
+Programs following
+[spec-002](../docs/specs/spec-002-shape_pipelines_javascript.md) (JavaScript) and
+[spec-003](../docs/specs/spec-003-shape_pipelines_python.md) (Python). The Python
+example imports the implemented `hexa` package and runs on Python 3.14+.
+JavaScript remains a syntax-only example until its binding exists.
+
+From the repository root, run `python3 -m unittest tests.test_conformance -v` to
+check live fixture responses, journal replay, inert effects, provenance and shape
+encodings. The shared JSON fixtures are unchanged.
 
 ## Mortgage people
 

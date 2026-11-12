@@ -261,8 +261,8 @@ export class Gap extends Failure {
 ## Runtime
 
 ```js
-/** Drive one strand: effects and instructions go to `scope`, plain values return. */
-async function drive(it, scope) {
+/** Drive one strand: effects and instructions go to `strand`, plain values return. */
+async function drive(it, strand) {
 	let step = it.next();
 	try {
 		while (!step.done) {
@@ -270,9 +270,9 @@ async function drive(it, scope) {
 			let value, failed = false;
 			try {
 				if (isThenable(yielded)) throw new Failure(Failure.Defect, Runtime.NativeAwaitable);
-				const result = isEffect(yielded) || isInstruction(yielded) ? scope.perform(yielded) : yielded;
+				const result = strand.perform(yielded);   // effect and instruction records act; other values pass through
 				value = isThenable(result) ? await result : result;
-			} catch (error) { value = scope.classify(error); failed = true; }
+			} catch (error) { value = strand.classify(error); failed = true; }
 			if (failed && value.kind === Failure.Cancel) throw value;   // closed below, never thrown in
 			step = failed ? it.throw(value) : it.next(value);
 		}
@@ -282,20 +282,22 @@ async function drive(it, scope) {
 	}
 }
 
-export async function run(env, Stage, ...inputs) {
-	const scope = Scope(env);   // stand-in env, ledger, journal, budgets, trace, strands
-	try { return await drive(Stage(scope.env, ...inputs), scope); }
-	catch (failure) { throw scope.attach(failure); }
+export async function run(env, stage, ...inputs) {
+	const strand = new Strand(new Run(env));   // Run: authority, budgets, journal, replay; Strand: stack, ledger, signal
+	try { return await drive(stage(strand.env, ...inputs), strand); }
+	catch (failure) { throw strand.attach(failure); }
 }
 ```
 
 Instructions and plain values resolve synchronously; only performed effects await.
-`join` and `race` use `Promise.allSettled` / `Promise.race` over child scopes, each
-with an `AbortController` derived from the strand's signal. `Scope`, `isEffect` and
-`isInstruction` are internal to `runtime.js`.
+`join` and `race` use `Promise.allSettled` / `Promise.race` over child strands, each
+with an `AbortController` derived from the strand's signal. Effect descriptions and
+instructions are instances of record classes (`Effect`, `Report`, `LedgerRead`,
+`Join`, `Race`, `Fork`, `Parallel`), so a plain object a stage yields is always a
+value. `Run`, `Strand` and the record classes are not exported from `runtime.js`.
 
 Origins (spec-005 provenance) are kept in a `WeakMap` from container to origin,
-owned by the run's scope. Marking walks a result once, when it is resumed into the
+owned by the run. Marking walks a result once, when it is resumed into the
 stage.
 
 ## Example

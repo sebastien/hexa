@@ -43,6 +43,8 @@ named by the key it is declared under, so a name is written once.
 - Names are fixed when the namespace is built. Declaring a named stage again under a
   different name, in any namespace, is the `Runtime.StageRenamed` error, so a trace
   never shows a stage under two names. Reference it by its existing name instead.
+- Stage names are registered process-wide: declaring two different stages under one
+  name, in any namespace, is the `Runtime.NameRedeclared` error.
 - The namespace groups; it does not qualify. Stage names stay unique by their own
   namespace prefix (`MortgageClientsSelect`), and traces and ledger targets use them
   unqualified.
@@ -59,7 +61,9 @@ Boundary stages declare contracts; internal hand-written stages may use a one-li
 `inputs → output` doc comment instead.
 
 - The wrapper checks on every call, including delegated ones. `env.policy.contracts`
-  selects `Checks.Boundary` (default), `Checks.All` or `Checks.Off`; boundary input checks are never off.
+  selects `Checks.Boundary` (default), which checks every declared contract, or
+  `Checks.Off`, which keeps only the entry stage's input check: boundary input checks
+  are never off.
 - An input mismatch is a `Contract` failure; an output mismatch is a `Defect`.
 - Combinators derive contracts where they can: `project(S, T)` has input `S`,
   `guard(S)` output `S`, and `pipe(A, …, Z)` is `A.input → Z.output`. Tooling can
@@ -146,7 +150,7 @@ Response ← yield env.RequestSend({method: GET, path: p"/mortgages/{root.mortga
 
 - The runtime hands each stage a stand-in `env`. Data properties (`root`, `policy`,
   `vocabulary`) are values; calling an operation returns an inert effect description
-  `{operation, arguments}`. Nothing runs until it is yielded. Stage code reads as a
+  with `operation` and `arguments`. Nothing runs until it is yielded. Stage code reads as a
   call: `yield env.RequestSend(...)`.
 - Effect arguments and results are JSON data, so effects can be journaled, replayed,
   compared in tests and serialised.
@@ -169,9 +173,15 @@ Response ← yield env.RequestSend({method: GET, path: p"/mortgages/{root.mortga
   `{Mirror: value}`, destructured like a `join`. Lists cannot hold holes and `null` is
   a value, so list items are interchangeable alternatives; race a struct when the
   winner matters.
+- `race` selects the first **completion**, not the first success. If the selected
+  participant fails or is cancelled, that interruption propagates; another
+  participant's success is never a fallback. Selection is of a direct participant,
+  which may itself be a nested instruction or fork handle.
 - Items of `join` and `race` are effects, handles or nested instructions.
-  Instructions are data too, `{instruction, ...}`, so a yielded `join` compares
-  equal to an expected one in tests.
+- Effect descriptions and instructions are typed records, not plain structs. They
+  compare equal by value, so a yielded `join` compares equal to an expected one in
+  tests, and a struct a stage yields is always a plain value, whatever its keys. An
+  effect description encodes as `{operation, arguments}`.
 - A stage cannot finish with unjoined strands; the runtime cancels them and raises
   the `Failure.Defect` `Runtime.StrandUnjoined`.
 - Forked strands never receive accumulators. A stage that joins effects updates its
@@ -328,8 +338,10 @@ it fails with a transient `Failure.Effect`, waiting `delay(attempt)` through
   the last effect. Traces are value-free and map onto the pipeline diagram.
 - When `env.record` is set, the runtime journals each performed effect:
   `{index, strand, seq, operation, arguments, result | failure | cancelled, attempt}`.
-  `index` is the order of completion and is informational only. A journal is a JSON
-  array and valid `env.replay` input; replay never calls host operations.
+  It also journals explicit `race` decisions (below). `index` is the order of
+  journal emission: effect completion or race selection/cancellation. It is
+  informational only, never a replay matching or winner-selection key. A journal
+  is a JSON array and valid `env.replay` input; replay never calls host operations.
 - A failed run raises its failure with the ledger and, when recording, the journal
   attached privately. Journals contain source data: they are host-private evidence,
   never disclosed to callers by default.
@@ -376,14 +388,49 @@ in the program, not by completion order.
   difference is the `Failure.Defect` `Runtime.ReplayMismatch`.
 - A recorded `failure` is raised again with its kind and code; a `cancelled` entry
   marks a strand that lost a `race` or was cancelled by a sibling, and replay cancels
-  that strand at the same point. A `race` therefore has the recorded winner.
+  that strand at the same point. Race decisions, not effect completion order or
+  the presence of cancelled effects, determine the selected participant.
 - A journal fixture is valid for every language binding: strand ids, `seq` and
   arguments never depend on scheduling.
 
-**Open:** when two `race` alternatives finish successfully before the runtime can
-cancel the loser, neither entry is necessarily cancelled. The journal needs a
-specified winner representation for exact replay of that case. Completion index
-is informational, not a replacement for an explicit winner rule.
+### Race decisions
+
+Effects record what happened; a race decision records which direct participant
+the runtime selected. Both alternatives may finish successfully before cancellation
+reaches the loser, so effect results alone do not identify the selected one.
+
+```json
+{"instruction": "race", "strand": "", "ordinal": 0,
+ "keys": ["Primary", "Mirror"], "winner": "Mirror"}
+```
+
+- Each valid `race` invocation consumes one run-local, per-strand race `ordinal`,
+  starting at 0. Repeated invocations and retries advance it; a reused strand path
+  continues its counter. Race decisions never consume or reset effect `seq`.
+- Decisions match by `(strand, ordinal)` in a separate identity domain from effect
+  positions `(strand, seq)`. A decision and an effect may both have position 0.
+- `keys` lists participant keys in declaration order. Struct keys are strings;
+  list positions are integers `0` through `n - 1`, never booleans or numeric
+  strings. A fork handle's key is its position in this race, not its fork id.
+- `winner` names the selected participant even when it fails or is cancelled. The
+  runtime records the decision immediately on selection, before cancelling and
+  draining the others. Completed losing effects retain their actual results.
+- If the whole race is cancelled before selection, the decision has
+  `"cancelled": true` instead of `winner`. Exactly one of these fields is present.
+- Replay validates the participant keys, then drives every participant through its
+  recorded work to its recorded completion or cancellation. It drains nested joins
+  too: immediately cancelling nonwinners could discard effects and ledger reports
+  that happened before the original selection. Ledger entries still merge in
+  declaration order.
+- Replay returns the recorded selected participant's value, or propagates its
+  failure/cancellation, regardless of replay scheduling. A race-level cancellation
+  propagates even if all participants' recorded effects succeeded. A replay mismatch
+  in any participant, including a nonwinner, remains a defect.
+- Missing decisions or changed keys are `Failure.Defect` `Runtime.ReplayMismatch`;
+  successful replay also rejects unused journal entries. Malformed journals, including duplicate
+  decision identities or invalid winners, fail boundary validation. Older journals
+  without races remain valid; a legacy race journal without a decision is rejected,
+  never inferred from effect `index` or cancellation.
 
 ## Environment
 
