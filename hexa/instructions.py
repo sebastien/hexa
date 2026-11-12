@@ -18,7 +18,7 @@ from .stage import asStage
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "report ledger join race fork".split()
+__all__ = ["report", "ledger", "join", "race", "fork"]
 
 
 @dataclass(frozen=True, slots=True)

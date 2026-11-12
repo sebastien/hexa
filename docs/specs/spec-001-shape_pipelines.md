@@ -128,13 +128,18 @@ representation.
   codecs, transforms, constraints and named stages. Redeclaring a name with an equal
   value returns the existing one; a different value is the `Failure.Defect`
   `Runtime.NameRedeclared`. Unnamed helper stages are never registered.
+- Errors follow the same split. A mistake in program code (wrong arguments, a
+  malformed shape, selector or pattern) is reported where it is declared, as the
+  language's own argument error (`TypeError` or `ValueError` in Python, `TypeError` in
+  JavaScript). Anything found in data or registry state (decoded configuration, host
+  input, effect results, redeclarations) is a `Failure` with a code.
 
 ### Library enums
 
 | Namespace | Members |
 | --- | --- |
 | `Failure` | `Contract`, `Budget`, `Cancel`, `Defect`, `Shape`, `Gap`, `Effect` |
-| `Policy` | `Abort`, `Drop`; constructors `Substitute(Value)`, `Fallback(Stage)` |
+| `Policy` | `Abort`, `Drop`; callable members `Substitute(Value)`, `Fallback(Stage)` |
 | `Ledger` | `Gap`, `Loss` |
 | `Issue` | `Mismatch`, `Missing`, `Unexpected`, `Constraint`, `CaptureConflict` |
 | `Coverage` | `Supplied`, `SourceNull`, `NotSupplied`, `Unmapped`, `Conflicting` |

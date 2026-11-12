@@ -25,7 +25,12 @@ from .core import (
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "Any Text Num Int Float Bool Null Struct List DateTime Instant Decimal Tuple rest __ loose either nullable where refine via optional tolerant gather parsed pattern lossy codes slot slots errors check capture evidence".split()
+__all__ = [
+	"Any", "Text", "Num", "Int", "Float", "Bool", "Null", "Struct", "List", "DateTime",
+	"Instant", "Decimal", "Tuple", "rest", "__", "loose", "either", "nullable", "where",
+	"refine", "via", "optional", "tolerant", "gather", "parsed", "pattern", "lossy",
+	"codes", "slot", "slots", "errors", "check", "capture", "evidence"
+]
 
 SLOTS = {}
 DATE_RE = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(?:T([0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?)(Z|[+-][0-9]{2}:[0-9]{2})?)?")
@@ -34,7 +39,7 @@ DECIMAL_RE = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?")
 NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class Shape:
 	"""An immutable compiled shape or template operator.
 
@@ -56,6 +61,12 @@ class Shape:
 
 	kind: str
 	args: tuple = ()
+
+	def __eq__(self, other):
+		return isinstance(other, Shape) and self.kind == other.kind and sameArguments(self.args, other.args)
+
+	def __hash__(self):
+		return hash((self.kind, self.args))
 
 	def __and__(self, constraint):
 		return refine(self, constraint)
@@ -131,7 +142,10 @@ class Captures(dict):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Codec:
-	"""A declared parse/format pair, either a family (with `params`) or an instance."""
+	"""A concrete codec converting `source` values to `canonical` ones and back.
+
+	An instance of a `CodecFamily` carries the family and its `arguments`.
+	"""
 
 	name: str
 	source: Shape
@@ -140,32 +154,16 @@ class Codec:
 	format: object = field(repr=False)
 	gaps: tuple = ()
 	losses: tuple = ()
-	params: tuple = ()
-	arguments: tuple = ()
-	family: object = None
 	table: object = None
 	gapTable: object = None
 	examples: tuple = ()
-	instances: dict = field(default_factory=dict, repr=False)
+	arguments: tuple = ()
+	family: object = None
 
 	def __getattr__(self, name):
 		return reasonNamed(self.gaps + self.losses, name)
 
-	def __call__(self, *arguments):
-		if not self.params or len(arguments) != len(self.params):
-			raise TypeError("codec arguments do not match parameters")
-		for value, (_, shape) in zip(arguments, self.params):
-			validateData(value)
-			check(value, shape, Issue.Mismatch)
-		key = json.dumps(arguments, separators=(",", ":"), ensure_ascii=False)
-		if key not in self.instances:
-			name = self.name + "(" + key[1:-1] + ")"
-			self.instances[key] = register(name, Codec(name, self.source, self.canonical, self.parse, self.format, self.gaps, self.losses, arguments=tuple(freeze(v) for v in arguments), family=self, examples=self.examples))
-		return self.instances[key]
-
 	def convert(self, value, *, formatting=False, original=None):
-		if self.params:
-			raise TypeError("instantiate a parameterised codec before use")
 		expected = self.canonical if formatting else self.source
 		if errors(value, expected):
 			raise Failure(Failure.Defect, Issue.Mismatch)
@@ -191,11 +189,52 @@ class Codec:
 		return result
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class CodecFamily:
+	"""A parameterised codec: calling it with arguments returns a cached `Codec`."""
+
+	name: str
+	source: Shape
+	canonical: Shape
+	parse: object = field(repr=False)
+	format: object = field(repr=False)
+	gaps: tuple = ()
+	losses: tuple = ()
+	params: tuple = ()
+	examples: tuple = ()
+	instances: dict = field(default_factory=dict, repr=False)
+
+	def __getattr__(self, name):
+		return reasonNamed(self.gaps + self.losses, name)
+
+	def __call__(self, *arguments):
+		if len(arguments) != len(self.params):
+			raise TypeError("codec arguments do not match parameters")
+		for value, (_, shape) in zip(arguments, self.params):
+			validateData(value)
+			check(value, shape, Issue.Mismatch)
+		key = json.dumps(arguments, separators=(",", ":"), ensure_ascii=False)
+		if key not in self.instances:
+			name = self.name + "(" + key[1:-1] + ")"
+			self.instances[key] = register(name, Codec(name, self.source, self.canonical, self.parse, self.format, self.gaps, self.losses,
+				examples=self.examples, arguments=tuple(freeze(value) for value in arguments), family=self))
+		return self.instances[key]
+
+
 # -----------------------------------------------------------------------------
 #
 # UTILITIES
 #
 # -----------------------------------------------------------------------------
+
+def sameArguments(left, right):
+	"""Compare shape arguments with JSON semantics: booleans never equal numbers."""
+	if isinstance(left, tuple) and isinstance(right, tuple):
+		return len(left) == len(right) and all(sameArguments(a, b) for a, b in zip(left, right))
+	if isinstance(left, bool) or isinstance(right, bool):
+		return type(left) is type(right) and left == right
+	return left == right
+
 
 def reasonNamed(reasons, name):
 	"""Return the member of `reasons` whose short name is `name`, as a codec or transform attribute."""
@@ -708,10 +747,11 @@ def nullable(shape: object) -> Shape:
 	return either(shape, Null)
 
 
-def where(predicate: object, code: str | Member) -> Constraint:
-	"""Register a named pure constraint."""
-	result = Constraint(str(code), predicate)
-	return register(result.name, result)
+def where(predicate: object, name: str) -> Constraint:
+	"""Register a pure predicate as the constraint `name`, a qualifier such as `"Even"`."""
+	if not isinstance(name, str) or not NAME_RE.fullmatch(name):
+		raise TypeError("constraints are named by a qualifier string, not a code")
+	return register(name, Constraint(name, predicate))
 
 
 def refine(shape: object, *constraints: Constraint) -> Shape:
@@ -726,7 +766,7 @@ def refine(shape: object, *constraints: Constraint) -> Shape:
 
 def via(slot: Slot, codec: Codec) -> Shape:
 	"""Attach a source codec to one slot position."""
-	if not isinstance(slot, Slot) or not isinstance(codec, Codec) or codec.params:
+	if not isinstance(slot, Slot) or not isinstance(codec, Codec):
 		raise TypeError("via requires a slot and an instantiated codec")
 	return Shape("via", (slot, codec))
 
@@ -774,7 +814,7 @@ def pattern(source: str, *, registry: dict | None = None) -> Shape:
 		if not isinstance(key, (str, Slot)):
 			raise Failure(Failure.Contract, Runtime.SlotUnknown)
 		codecValue = catalog.get(formatName) if separator else None
-		if separator and (not isinstance(codecValue, Codec) or codecValue.params):
+		if separator and not isinstance(codecValue, Codec):
 			raise Failure(Failure.Contract, Runtime.MemberUnknown)
 		if isinstance(key, Slot) and not compatible(codecValue.canonical if codecValue else Text, key.shape):
 			raise TypeError("pattern codec is incompatible with slot")

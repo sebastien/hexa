@@ -14,7 +14,7 @@ from .shape import Shape, asCaptures, capture, checkOutput, children, codeNamesp
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "transform derive expand reshape".split()
+__all__ = ["transform", "derive", "expand", "reshape"]
 
 
 @dataclass(frozen=True, slots=True, eq=False)

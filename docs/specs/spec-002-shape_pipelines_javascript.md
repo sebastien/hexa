@@ -54,7 +54,9 @@ Import canonical names unchanged; never rename on import.
   JSON value: it never matches `Null` and is not a shape.
 - `List`, `[S]` and `Tuple(...)` match arrays without holes. An array literal of any
   other length than one is rejected as a shape.
-- `where(Predicate, Code)` wraps a pure predicate as a named constraint. Standard
+- `where(Predicate, Name)` wraps a pure predicate as a named constraint. `Name` is a
+  qualifier string (`"Even"`), not a code: constraints register under their own name,
+  and a failed constraint reports `Issue.Constraint` with that name. Standard
   constraints (`DateOnly`, `Timed`, `Zoned`, `Positive`, `Nonempty`) are exported
   ready to use.
 

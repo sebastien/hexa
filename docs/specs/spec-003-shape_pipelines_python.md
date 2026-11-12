@@ -73,7 +73,9 @@ allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruf
   index keys as strings. Complete containers remain lists.
 - `Any` and `List` are this library's shapes, not `typing.Any` / `typing.List`; do not
   import both into one module.
-- `where(predicate, code)` wraps a pure predicate as a named constraint. Standard
+- `where(predicate, name)` wraps a pure predicate as a named constraint. `name` is a
+  qualifier string (`"Even"`), not a code: constraints register under their own name,
+  and a failed constraint reports `Issue.Constraint` with that name. Standard
   constraints (`DateOnly`, `Timed`, `Zoned`, `Positive`, `Nonempty`) are exported
   ready to use.
 

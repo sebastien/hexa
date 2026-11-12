@@ -6,7 +6,7 @@ import inspect
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, failureData, freeze, backoff, member, register, retryable, thaw, validateData
+from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, backoff, constructor, failureData, freeze, member, retryable, thaw, validateData
 from .instructions import LedgerRead, Parallel, Report
 from .selector import matches
 from .shape import Slot, capture, check, compileShape, definiteReferences, errors, mergeCaptures, references, validateShape
@@ -20,7 +20,11 @@ from .vocabulary import Location, Origin
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "stages stage pipe lift project guard select each parallel choose when otherwise admit fold tap bound recover retry always collect Policy backoff".split()
+__all__ = [
+	"stages", "stage", "pipe", "lift", "project", "guard", "select", "each", "parallel",
+	"choose", "when", "otherwise", "admit", "fold", "tap", "bound", "recover", "retry",
+	"always", "collect", "Policy", "backoff"
+]
 
 # NOTE: Policies only ever handle these kinds; `on` narrows the default further.
 RECOVERABLE_KINDS = (Failure.Shape, Failure.Gap, Failure.Effect)
@@ -29,31 +33,34 @@ DEFAULT_RECOVER = (Failure.Shape, Failure.Gap)
 
 @dataclass(frozen=True, slots=True)
 class PolicyValue:
-	"""A parameterised policy: `Substitute` carries a value, `Fallback` a stage."""
+	"""A parameterised policy: `Policy.Substitute` carries a value, `Policy.Fallback` a stage."""
 
-	kind: str
+	kind: object
 	value: object
 
 	def encoded(self):
-		if self.kind == "Substitute":
-			return {"$": "Policy.Substitute", "value": thaw(self.value)}
+		if self.kind is Policy.Substitute:
+			return {"$": self.kind.name, "value": thaw(self.value)}
 		if not self.value.name:
 			raise TypeError("fallback stages must be named to encode")
-		return {"$": "Policy.Fallback", "stage": self.value.name}
+		return {"$": self.kind.name, "stage": self.value.name}
 
 
 def substitute(value):
 	validateData(value)
-	return PolicyValue("Substitute", freeze(deepcopy(value)))
+	return PolicyValue(Policy.Substitute, freeze(deepcopy(value)))
 
 
 def fallback(stage):
-	return PolicyValue("Fallback", asStage(stage))
+	return PolicyValue(Policy.Fallback, asStage(stage))
 
 
-Policy = Namespace("Policy", {"Abort": member("Policy.Abort"), "Drop": member("Policy.Drop"), "Substitute": substitute, "Fallback": fallback})
-register("Policy.Substitute", substitute)
-register("Policy.Fallback", fallback)
+Policy = Namespace("Policy", {
+	"Abort": member("Policy.Abort"),
+	"Drop": member("Policy.Drop"),
+	"Substitute": constructor("Policy.Substitute", substitute),
+	"Fallback": constructor("Policy.Fallback", fallback),
+})
 
 
 class StagesMeta(ImmutableMeta):
@@ -141,7 +148,7 @@ def applyPolicy(env, source, inputs, policy, options, *, allowDrop=False):
 		if policy is Policy.Drop and allowDrop:
 			return ABSENT
 		if isinstance(policy, PolicyValue):
-			if policy.kind == "Substitute":
+			if policy.kind is Policy.Substitute:
 				value = thaw(policy.value)
 				if source.output is not None and errors(value, source.output):
 					raise Failure(Failure.Defect, Issue.Mismatch)

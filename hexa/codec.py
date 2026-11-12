@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .core import Gap, freeze, register
-from .shape import Codec, codeNamespace, compileShape, errors
+from .shape import Codec, CodecFamily, codeNamespace, compileShape, errors
 
 # -----------------------------------------------------------------------------
 #
@@ -75,11 +75,14 @@ def codec(name, *, source, canonical, parse=None, format=None, map=None, gaps=()
 		parse, format = tableFunctions(map, dict(gaps), source, canonical, reasons)
 	if not callable(parse) or not callable(format):
 		raise TypeError("codecs require parse and format functions")
-	result = Codec(name, source, canonical, parse, format,
-		tuple(reasons.members[item] for item in gapNames), tuple(reasons.members[item] for item in losses),
-		tuple((key, compileShape(value)) for key, value in (params or {}).items()),
+	gapMembers = tuple(reasons.members[item] for item in gapNames)
+	lossMembers = tuple(reasons.members[item] for item in losses)
+	frozenExamples = tuple(freeze(item) for item in examples)
+	if params:
+		parameters = tuple((key, compileShape(value)) for key, value in params.items())
+		return register(name, CodecFamily(name, source, canonical, parse, format, gapMembers, lossMembers, parameters, frozenExamples))
+	return register(name, Codec(name, source, canonical, parse, format, gapMembers, lossMembers,
 		table=freeze(map) if map is not None else None, gapTable=freeze(gaps) if isinstance(gaps, dict) else None,
-		examples=tuple(freeze(item) for item in examples))
-	return register(name, result)
+		examples=frozenExamples))
 
 # EOF

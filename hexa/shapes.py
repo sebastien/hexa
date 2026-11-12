@@ -24,6 +24,14 @@ from .vocabulary import DateOnly, DatePattern, DecimalText, InstantOffset, Locat
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "Any Text Num Int Float Bool Null Struct List DateTime Instant Decimal Tuple rest __ loose either refine where pattern nullable tolerant gather slots slot via optional derive codec transform lossy codes Location Origin DateOnly Timed Zoned Positive Nonempty parts InstantOffset DecimalText DatePattern errors check capture expand reshape matches evidence parsed encode decode Failure Gap Issue".split()
+__all__ = [
+	"Any", "Text", "Num", "Int", "Float", "Bool", "Null", "Struct", "List", "DateTime",
+	"Instant", "Decimal", "Tuple", "rest", "__", "loose", "either", "refine", "where",
+	"pattern", "nullable", "tolerant", "gather", "slots", "slot", "via", "optional",
+	"derive", "codec", "transform", "lossy", "codes", "Location", "Origin", "DateOnly",
+	"Timed", "Zoned", "Positive", "Nonempty", "parts", "InstantOffset", "DecimalText",
+	"DatePattern", "errors", "check", "capture", "expand", "reshape", "matches", "evidence",
+	"parsed", "encode", "decode", "Failure", "Gap", "Issue"
+]
 
 # EOF

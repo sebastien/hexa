@@ -11,3 +11,20 @@ dependencies = []
 
 [tool.setuptools.packages.find]
 include = ["hexa*"]
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.format]
+indent-style = "tab"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "N"]
+# NOTE: House style indents with tabs, keeps long declarative lines and names
+# fields camelCase. The spec (spec-001, spec-003) names stages, operations and
+# their parameters in PascalCase, `stages` in lowercase and `Failure` without an
+# `Error` suffix, and stage namespaces define methods without `self`.
+ignore = ["W191", "E501", "N801", "N802", "N803", "N805", "N806", "N815", "N816", "N818"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -10,7 +10,7 @@ from hexa.shapes import (
 	Float, Gap, Instant, InstantOffset, Int, Issue, Nonempty, Null, Positive, Text, Tuple, __,
 	capture, check, codec, codes, decode, derive, either, encode, errors, evidence,
 	expand, gather, loose, matches, parsed, pattern, refine, rest, reshape,
-	slot, slots, tolerant, transform,
+	slot, slots, tolerant, transform, where,
 )
 from hexa.runtime import Runtime
 
@@ -56,6 +56,11 @@ class ShapeTests(unittest.TestCase):
 		self.assertIs(slot("ShapeTestSlots.Id", Int), TestSlots.Id)
 		with self.assertRaises(Failure) as caught:
 			slots("ShapeTestSlots", Id=Text)
+		self.assertIs(caught.exception.code, Runtime.SlotRedeclared)
+		slot("ShapeTestLiteral", 1)
+		self.assertIs(slot("ShapeTestLiteral", 1.0), slot("ShapeTestLiteral", 1))
+		with self.assertRaises(Failure) as caught:
+			slot("ShapeTestLiteral", True)
 		self.assertIs(caught.exception.code, Runtime.SlotRedeclared)
 		with self.assertRaises(AttributeError) as caught:
 			TestSlots.Missing
@@ -175,6 +180,11 @@ class ShapeTests(unittest.TestCase):
 			self.assertTrue(errors(value, DateTime))
 		self.assertEqual(capture("20260915", TestSlots.Date @ DatePattern("YYYYMMDD"))[TestSlots.Date], "2026-09-15")
 		self.assertIs(DatePattern("YYYYMMDD"), DatePattern("YYYYMMDD"))
+		self.assertIs(DatePattern("YYYYMMDD").family, DatePattern)
+		with self.assertRaises(TypeError):
+			TestSlots.Date @ DatePattern
+		with self.assertRaises(TypeError):
+			DecimalText("unexpected")
 		amount = slots("ShapeAmount", Value=Decimal)
 		for raw, expected in (("1.2500e3", "1250"), ("-0.000", "0"), ("0.00100", "0.001"), (12.5, "12.5")):
 			self.assertEqual(capture(raw, amount.Value @ DecimalText)[amount.Value], expected)
@@ -212,8 +222,13 @@ class ShapeTests(unittest.TestCase):
 			decode("$Unknown")
 		with self.assertRaises(Failure):
 			decode("$Text", registry={})
-		with self.assertRaises(ValueError):
+		with self.assertRaises(Failure) as caught:
 			decode({"$rest": "$Any", "unexpected": 1})
+		self.assertIs(caught.exception.code, Issue.Unexpected)
+		for malformed in ({"$loose": "$Text"}, {"$refine": "$Int", "constraints": ["$Text"]}, {"$unknown": 1}, {"$": "Text", "arguments": [1]}):
+			with self.subTest(malformed=malformed), self.assertRaises(Failure) as caught:
+				decode(malformed)
+			self.assertIs(caught.exception.kind, Failure.Contract)
 		with self.assertRaises(Failure):
 			decode([[[[1]]]], maxDepth=2)
 		cyclic = []
@@ -226,6 +241,10 @@ class ShapeTests(unittest.TestCase):
 		self.assertEqual(expand(decode(encode(value)), {})[0], {"items": {0: 10, 2: 30}})
 
 	def test_constraint_operators(self):
+		even = where(lambda value: value % 2 == 0, "ShapeEven")
+		self.assertEqual(errors(3, Int & even)[0]["constraint"], "ShapeEven")
+		with self.assertRaises(TypeError):
+			where(lambda value: True, TestReason.Invalid)
 		self.assertEqual(errors(5, Int & Positive), [])
 		self.assertEqual(errors(-1, Int & Positive)[0]["constraint"], "Positive")
 		self.assertEqual(errors([1], [Int] & Nonempty), [])
@@ -271,7 +290,7 @@ class ShapeTests(unittest.TestCase):
 	def test_standard_examples(self):
 		for item in (DecimalText, InstantOffset, DatePattern):
 			for example in item.examples:
-				instance = item(*example["arguments"]) if item.params else item
+				instance = item(*example["arguments"]) if "arguments" in example else item
 				result = instance.convert(example["input"])
 				self.assertEqual(getattr(result, "value", result), example["output"])
 				if example.get("direction", "both") == "both":

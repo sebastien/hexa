@@ -25,7 +25,10 @@ from .stage import asStage
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "run report ledger join race fork inert p Ledger Coverage Checks Runtime".split()
+__all__ = [
+	"run", "report", "ledger", "join", "race", "fork", "inert", "p", "Ledger", "Coverage",
+	"Checks", "Runtime"
+]
 
 DEFAULT_POLICY = {"contracts": Checks.Boundary, "maxGaps": 1000, "maxConcurrency": 4, "maxAttempts": 3, **LIMITS, "retry": {"default": False, "attempts": 1}}
 

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import inspect
 from copy import deepcopy
 
 from .codec import codec
-from .core import LIMITS, REGISTRY, Failure, Issue, Member, Namespace, Runtime, thaw, validateData
-from .shape import Codec, Constraint, Shape, Slot, Tuple, compileShape, either, gather, optional, parsed, pattern, refine, rest, tolerant, via
+from .core import LIMITS, REGISTRY, Constructor, Failure, Issue, Member, Namespace, Runtime, thaw, validateData
+from .shape import Codec, CodecFamily, Constraint, Shape, Slot, Tuple, compileShape, either, gather, optional, parsed, pattern, refine, rest, tolerant, via
 from .template import Transform, compileTemplate, derive
 
 # -----------------------------------------------------------------------------
@@ -16,7 +15,7 @@ from .template import Transform, compileTemplate, derive
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "encode decode".split()
+__all__ = ["encode", "decode"]
 
 # NOTE: `$` keys accepted next to each operator in an encoded object.
 OPERATOR_OPTIONS = {"$": {"via", "optional", "arguments", "value", "stage"}, "$refine": {"constraints"}, "$derive": {"arguments"}}
@@ -32,13 +31,20 @@ def escapeKey(key):
 	return "$" + key if key.startswith("$") else key
 
 
+def encodeCodecReference(value):
+	"""Reference a declared codec by name, or a family instance by family and arguments."""
+	return {"$": value.family.name, "arguments": thaw(value.arguments)} if value.family else value.name
+
+
 def encodeCodec(value):
+	if isinstance(value, Codec) and value.family:
+		return encodeCodecReference(value)
 	definition = {"name": value.name, "source": encode(value.source), "canonical": encode(value.canonical)}
-	if value.table is not None:
+	if isinstance(value, Codec) and value.table is not None:
 		definition.update(map={key: list(item) if isinstance(item, tuple) else item for key, item in value.table.items()}, gaps=dict(value.gapTable or {}))
 	else:
 		definition.update(gaps=[item.short for item in value.gaps], losses=[item.short for item in value.losses])
-	if value.params:
+	if isinstance(value, CodecFamily):
 		definition["params"] = {key: encode(item) for key, item in value.params}
 	if value.examples:
 		definition["examples"] = thaw(value.examples)
@@ -58,9 +64,7 @@ def encodeShape(value):
 	if kind == "optional":
 		return {"$": args[0].name, "optional": True}
 	if kind == "via":
-		codecValue = args[1]
-		codecRef = {"$": codecValue.family.name, "arguments": thaw(codecValue.arguments)} if codecValue.family else codecValue.name
-		return {"$": args[0].name, "via": codecRef}
+		return {"$": args[0].name, "via": encodeCodecReference(args[1])}
 	if kind in ("struct", "loose"):
 		result = {escapeKey(key) + ("?" if isOptional else ""): encode(child) for key, isOptional, child in args}
 		return {"$loose": result} if kind == "loose" else result
@@ -89,7 +93,7 @@ def encode(value: object) -> object:
 		return "$" + value.name
 	if isinstance(value, Namespace):
 		return {key: encode(item) for key, item in value.members.items()}
-	if isinstance(value, Codec):
+	if isinstance(value, (Codec, CodecFamily)):
 		return encodeCodec(value)
 	if isinstance(value, Shape):
 		return encodeShape(value)
@@ -112,7 +116,10 @@ def encode(value: object) -> object:
 
 
 def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMITS["maxDepth"], maxNodes: int = LIMITS["maxNodes"], maxBytes: int = LIMITS["maxBytes"]) -> object:
-	"""Resolve bounded JSON configuration through an explicit registry."""
+	"""Resolve bounded JSON configuration through an explicit registry.
+
+	Encoded configuration is data, so anything malformed is a `Failure.Contract`.
+	"""
 	validateData(value, maxDepth=maxDepth, maxNodes=maxNodes, maxBytes=maxBytes)
 	catalog = REGISTRY if registry is None else registry
 
@@ -133,12 +140,11 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 
 	def visitReference(item):
 		result = resolve(item["$"])
-		if inspect.isfunction(result) and ("value" in item or "stage" in item):
-			# Registered factories, such as `Policy.Substitute` and `Policy.Fallback`.
+		if isinstance(result, Constructor) and ("value" in item or "stage" in item):
 			return result(item["value"]) if "value" in item else result(resolve(item["stage"]))
 		if "arguments" in item:
-			if not isinstance(result, Codec):
-				raise TypeError("only codec families accept arguments")
+			if not isinstance(result, CodecFamily):
+				raise Failure(Failure.Contract, Issue.Mismatch)
 			result = result(*item["arguments"])
 		if "via" in item:
 			result = via(result, visit(item["via"]) if isinstance(item["via"], dict) else resolve(item["via"]))
@@ -151,7 +157,7 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 		name = definition["name"]
 		if name in catalog:
 			result = catalog[name]
-			if not isinstance(result, Codec) or encode(result) != item:
+			if not isinstance(result, (Codec, CodecFamily)) or encode(result) != item:
 				raise Failure(Failure.Contract, Issue.Mismatch)
 			return result
 		if "map" not in definition:
@@ -175,10 +181,10 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 				return visitStruct(item)
 			return {key: visit(child) for key, child in item.items()}
 		if len(operators) != 1:
-			raise ValueError("encoding requires exactly one operator")
+			raise Failure(Failure.Contract, Issue.Unexpected)
 		operator = operators[0]
 		if set(item) - {operator} - OPERATOR_OPTIONS.get(operator, set()):
-			raise ValueError("unknown encoding option")
+			raise Failure(Failure.Contract, Issue.Unexpected)
 		argument = item[operator]
 		if operator == "$":
 			return visitReference(item)
@@ -189,18 +195,22 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 		if operator == "$loose":
 			result = compileShape(visit(argument))
 			if result.kind != "struct":
-				raise TypeError("loose encoding requires a struct")
+				raise Failure(Failure.Contract, Issue.Mismatch)
 			return Shape("loose", result.args)
 		if operator == "$refine":
 			return refine(visit(argument), *(visit(child) for child in item["constraints"]))
 		if operator == "$derive":
 			return derive(visit(argument), *(visit(child) for child in item["arguments"]))
 		if operator not in UNARY_OPERATORS:
-			raise ValueError("unknown encoding operator")
+			raise Failure(Failure.Contract, Issue.Unexpected)
 		if operator == "$pattern":
 			return pattern(argument, registry=catalog)
 		return UNARY_OPERATORS[operator](visit(argument))
 
-	return visit(value)
+	try:
+		return visit(value)
+	except (TypeError, ValueError, KeyError) as error:
+		# Constructors reject malformed arguments as programming errors; here they came from data.
+		raise Failure(Failure.Contract, Issue.Mismatch) from error
 
 # EOF

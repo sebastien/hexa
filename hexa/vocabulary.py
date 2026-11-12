@@ -16,7 +16,10 @@ from .template import transform
 #
 # -----------------------------------------------------------------------------
 
-__all__ = "DateOnly Timed Zoned Positive Nonempty Location Origin parts DecimalText InstantOffset DatePattern".split()
+__all__ = [
+	"DateOnly", "Timed", "Zoned", "Positive", "Nonempty", "Location", "Origin", "parts",
+	"DecimalText", "InstantOffset", "DatePattern"
+]
 
 DECIMAL_SOURCE_RE = re.compile(r"([+-]?)([0-9]+)(?:\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?")
 

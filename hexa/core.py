@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 
 # -----------------------------------------------------------------------------
@@ -40,6 +40,16 @@ class Member:
 
 	def __deepcopy__(self, memo):
 		return self
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class Constructor(Member):
+	"""A member that also builds parameterised values, e.g. `Policy.Substitute(42)`."""
+
+	factory: object = field(default=None, compare=False)
+
+	def __call__(self, *arguments):
+		return self.factory(*arguments)
 
 
 class Namespace:
@@ -109,6 +119,14 @@ def register(name, value):
 def member(name):
 	if name not in MEMBERS:
 		MEMBERS[name] = register(name, Member(name))
+	return MEMBERS[name]
+
+
+def constructor(name, factory):
+	"""Declare an interned member that builds values with `factory` when called."""
+	if name in MEMBERS:
+		raise Failure(Failure.Defect, Runtime.NameRedeclared)
+	MEMBERS[name] = register(name, Constructor(name, factory))
 	return MEMBERS[name]
 
 
