@@ -17,8 +17,8 @@ without it.
 
 | Module | Exports |
 | --- | --- |
-| `shapes.js` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `Failure`, `Gap`, `Issue` |
-| `combinators.js` | Combinators, `Policy`, `backoff` |
+| `shapes.js` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `profile`, `request`, `describe`, `SelectionRequest`, `Failure`, `Gap`, `Issue`, `Profile` |
+| `combinators.js` | Combinators (including `validate` and `plan`), `Policy`, `backoff` |
 | `runtime.js` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
 Import canonical names unchanged; never rename on import.
@@ -341,7 +341,7 @@ export const People = stages(S => ({
 }));
 ```
 
-[`examples/mortgage-people`](examples/README.md) has this example with fixtures.
+[`examples/mortgage-people`](../../examples/README.md) has this example with fixtures.
 
 ## Testing
 

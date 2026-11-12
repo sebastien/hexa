@@ -6,7 +6,8 @@ import inspect
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, backoff, constructor, failureData, freeze, member, retryable, thaw, validateData
+from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, Profile, backoff, constructor, failureData, freeze, member, retryable, thaw, validateData
+from .profile import RequestFormat, admitData
 from .instructions import LedgerRead, Parallel, Report
 from .selector import matches
 from .shape import Slot, capture, check, compileShape, definiteReferences, errors, mergeCaptures, references, validateShape
@@ -23,7 +24,7 @@ from .vocabulary import Location, Origin
 __all__ = [
 	"stages", "stage", "pipe", "lift", "project", "guard", "select", "each", "parallel",
 	"choose", "when", "otherwise", "admit", "fold", "tap", "bound", "recover", "retry",
-	"always", "collect", "Policy", "backoff"
+	"always", "collect", "validate", "plan", "Policy", "backoff"
 ]
 
 # NOTE: Policies only ever handle these kinds; `on` narrows the default further.
@@ -155,6 +156,17 @@ def applyPolicy(env, source, inputs, policy, options, *, allowDrop=False):
 				return value
 			return (yield from policy.value(env, *inputs))
 		raise TypeError("invalid failure policy")
+
+
+def requestOptions(env, format):
+	"""Return the options of `format` under `env.policy.profile`, refusing an unpermitted format."""
+	if not isinstance(format, RequestFormat):
+		raise TypeError("request stages take a request format")
+	definition = env.policy.get("profile")
+	options = definition.options(format) if definition is not None else None
+	if options is None:
+		raise Failure(Failure.Contract, Profile.Forbidden)
+	return definition, options
 
 
 # -----------------------------------------------------------------------------
@@ -400,6 +412,47 @@ def retry(source, *, attempts=None, delay=None):
 		finally:
 			strand.retryDepth, strand.attempt = previous
 	return Stage(execute, "retry", input=source.input, output=source.output)
+
+
+def validate(format):
+	"""Admit caller data as a request of `format` under the environment's profile."""
+	if not isinstance(format, RequestFormat):
+		raise TypeError("validate takes a request format")
+	def execute(env, value):
+		definition, options = requestOptions(env, format)
+		admitData(value, definition)
+		if not isinstance(value, dict):
+			raise Failure(Failure.Contract, Issue.Mismatch, [])
+		if "version" not in value:
+			raise Failure(Failure.Contract, Issue.Missing, ["version"])
+		if type(value["version"]) is not int or value["version"] not in options["versions"]:
+			raise Failure(Failure.Contract, Profile.Forbidden, ["version"])
+		result = format.validate(options, deepcopy(value), thaw(env.vocabulary.get(format.name, {})))
+		validateData(result)
+		return (yield result)
+	return Stage(execute, "validate")
+
+
+def plan(format):
+	"""Compile a validated request of `format` into a plan, without effects."""
+	if not isinstance(format, RequestFormat):
+		raise TypeError("plan takes a request format")
+	def execute(env, request):
+		_, options = requestOptions(env, format)
+		compiled = format.compile(options, deepcopy(request), thaw(env.vocabulary.get(format.name, {})))
+		allowed = env.policy.get("allow")
+		if allowed is not None and any(item not in allowed for item in compiled["allow"]):
+			raise Failure(Failure.Contract, Profile.Forbidden)
+		gaps = []
+		for gap in compiled["gaps"]:
+			if gap["code"] not in format.gaps:
+				raise Failure(Failure.Defect, Issue.Unexpected)
+			gaps.append({"code": str(gap["code"]), "path": list(gap["path"])})
+		budgets = {key: value for key, value in env.policy.items() if key.startswith("max") and type(value) is int}
+		result = {"request": deepcopy(request), "steps": compiled["steps"], "allow": compiled["allow"], "budgets": budgets, "gaps": gaps}
+		validateData(result)
+		return (yield result)
+	return Stage(execute, "plan")
 
 
 def always(source, cleanup):

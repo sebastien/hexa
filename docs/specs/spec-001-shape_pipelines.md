@@ -16,7 +16,7 @@ defined in [spec-004](spec-004-shape_pipelines_shapes.md), and naming in
 | Spec | Covers |
 | --- | --- |
 | spec-001 (this) | Concepts, naming, data and configuration, enums and codes, language binding rules, example |
-| [spec-004](spec-004-shape_pipelines_shapes.md) | Shapes, slots, codecs, selectors, templates and projection, encoding and profiles |
+| [spec-004](spec-004-shape_pipelines_shapes.md) | Shapes, slots, codecs, selectors, templates and projection, encoding, profiles, requests and plans |
 | [spec-005](spec-005-shape_pipelines_stages.md) | Stages, combinators, effects and concurrency, failures and policies, tracing, environment, testing |
 | [spec-002](spec-002-shape_pipelines_javascript.md), [spec-003](spec-003-shape_pipelines_python.md) | JavaScript and Python language bindings |
 
@@ -144,6 +144,7 @@ representation.
 | `Issue` | `Mismatch`, `Missing`, `Unexpected`, `Constraint`, `CaptureConflict` |
 | `Coverage` | `Supplied`, `SourceNull`, `NotSupplied`, `Unmapped`, `Conflicting` |
 | `Checks` | `Boundary`, `Off` |
+| `Profile` | `Exceeded`, `Forbidden` |
 | `Runtime` | `CloseYielded`, `MemberUnknown`, `NameRedeclared`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict` |
 
 ### Codes
@@ -154,8 +155,8 @@ Mortgage = codes {RootMismatch}
 
 - `codes(Namespace, ...Names)` declares program codes. Members are interned by
   qualified name, like slots; an unknown member is an error when it is referenced.
-- `Issue` and `Runtime` are the library's code namespaces. A codec is the namespace
-  of its own codes: `CountryName.Unmapped`, `CountryName.Unformattable` and the
+- `Issue`, `Profile` and `Runtime` are the library's code namespaces. A codec is the
+  namespace of its own codes: `CountryName.Unmapped`, `CountryName.Unformattable` and the
   reasons its `gaps` declare. `InstantOffset.Discarded` is a loss reason.
 
 ## Language bindings
@@ -171,10 +172,11 @@ language binding apart from syntax. Below, "binding" always means a language bin
 | Slots, codecs and codes | `slots`, `slot`, `via`, `optional`, `derive`, `codec`, `transform`, `lossy`, `codes`, `Location`, `Origin` |
 | Standard vocabulary | `DateOnly`, `Timed`, `Zoned`, `Positive`, `Nonempty`, `parts`, `InstantOffset`, `DecimalText`, `DatePattern` |
 | Operations | `errors`, `check`, `capture`, `expand`, `reshape`, `matches`, `evidence`, `parsed`, `encode`, `decode` |
-| Combinators | `stages`, `stage`, `pipe`, `lift`, `project`, `guard`, `select`, `each`, `parallel`, `choose`, `when`, `otherwise`, `admit`, `fold`, `tap`, `bound`, `recover`, `retry`, `always`, `collect` |
+| Profiles and requests | `profile`, `request`, `describe`, `SelectionRequest` |
+| Combinators | `stages`, `stage`, `pipe`, `lift`, `project`, `guard`, `select`, `each`, `parallel`, `choose`, `when`, `otherwise`, `admit`, `fold`, `tap`, `bound`, `recover`, `retry`, `always`, `collect`, `validate`, `plan` |
 | Policy helpers | `backoff` |
 | Runtime | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p` |
-| Enums | `Failure`, `Policy`, `Ledger`, `Issue`, `Coverage`, `Checks`, `Runtime` |
+| Enums | `Failure`, `Policy`, `Ledger`, `Issue`, `Coverage`, `Checks`, `Profile`, `Runtime` |
 | Failures | `Failure` (also the kind enum), `Gap` |
 
 - Every canonical name is spelled identically in every binding: no case variants,
@@ -243,5 +245,5 @@ without `firstName` is dropped and reported against `MortgageClientsProject`; a 
 without `countryOfBirth` keeps the row and omits `Country`, with no report; an
 unmapped country name reports `CountryName.Unmapped` and drops the row. The root
 check aborts because the root binds authority.
-[`examples/mortgage-people`](examples/README.md) holds both language bindings of this example
+[`examples/mortgage-people`](../../examples/README.md) holds both language bindings of this example
 with shared fixtures.

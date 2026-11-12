@@ -9,12 +9,12 @@ The style is specified in `docs/specs/` of this repository. This skill gives the
 
 | Need | Read |
 | --- | --- |
-| Concepts, naming, data vs configuration, enums and codes | [spec-001](../../spec-001-shape_pipelines.md) |
-| Shapes, slots, codecs, selectors, templates, encoding | [spec-004](../../spec-004-shape_pipelines_shapes.md) |
-| Stages, combinators, effects, failures, policies, retry, ledger, replay, testing | [spec-005](../../spec-005-shape_pipelines_stages.md) |
-| JavaScript syntax | [spec-002](../../spec-002-shape_pipelines_javascript.md) |
-| Python 3.14+ syntax | [spec-003](../../spec-003-shape_pipelines_python.md) |
-| A complete program with fixtures | [examples/mortgage-people](../../examples/README.md) |
+| Concepts, naming, data vs configuration, enums and codes | [spec-001](../../specs/spec-001-shape_pipelines.md) |
+| Shapes, slots, codecs, selectors, templates, encoding | [spec-004](../../specs/spec-004-shape_pipelines_shapes.md) |
+| Stages, combinators, effects, failures, policies, retry, ledger, replay, testing | [spec-005](../../specs/spec-005-shape_pipelines_stages.md) |
+| JavaScript syntax | [spec-002](../../specs/spec-002-shape_pipelines_javascript.md) |
+| Python 3.14+ syntax | [spec-003](../../specs/spec-003-shape_pipelines_python.md) |
+| A complete program with fixtures | [examples/mortgage-people](../../../examples/README.md) |
 
 **Python has an experimental implementation** in `hexa.shapes`,
 `hexa.combinators` and `hexa.runtime`, tested with `python3 -m unittest discover`.
@@ -148,6 +148,9 @@ a combinator → a hand-written stage. Never widen the shape language to avoid a
 
 - Use `guard` for caller and intermediate data (a `Contract` failure: authority
   mismatch aborts); use `project`/`capture` for source data (recoverable).
+- Caller-sent shapes go through `decode(value, Profile)`; caller requests through
+  `validate(Format)` then `plan(Format)`, with the profile in `env.policy.profile`.
+  Unpermitted terms are `Profile.Forbidden`; unsuppliable ones are plan gaps.
 - `each(S, Policy.Drop)` drops bad rows; `recover(S, Policy.Substitute(V))` or
   `Policy.Fallback(T)` for one value. `Policy.Drop` is valid only in `each`/`parallel`.
 - `target` defaults to the enclosing named stage; overrides must be program entities
@@ -256,8 +259,10 @@ class People(stages):
 
 Do not invent answers for these; flag them:
 
-- Profile format and compiling selections/relations requests (spec-004, deferred).
-- Index access (`a[0]`) in selectors or shapes (spec-004, open).
+- Hosts report plan gaps to the ledger themselves. A stored plan is recompiled,
+  never trusted, when its environment may differ (spec-004).
+- Index access is excluded by decision (spec-004); match fixed positions with
+  `Tuple` and `rest`.
 - Logical traces across native delegation need explicit instrumentation.
 - Encodings cover registered names only, never closures, handles or signals.
 - `SlotRedeclared` needs stable shape equality, not object identity.

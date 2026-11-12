@@ -3,7 +3,7 @@
 The data side of [spec-001](spec-001-shape_pipelines.md): shapes that match values,
 slots that capture them, codecs that convert source formats, selectors that find
 occurrences, templates that reproject captures, and the canonical encoding of all of
-them.
+them, and the profiles and plans that admit caller requests.
 
 ## Shapes
 
@@ -312,7 +312,7 @@ data/households/*/household/{id:$Household.Id}
 - A selector enumerates occurrences `{value, location}`. The selector says where to
   look; a shape says what must be there. A selector is a `/`-separated list of
   property names and `*` for array elements, optionally ending in a capture block. It
-  has no recursive descent, indexes or filters.
+  has no recursive descent, indexes ([decided](#trade-offs-and-decisions)) or filters.
 - A final capture block is a loose struct: `path/{id:$Household.Id}` matches as
   `loose({id: Household.Id})` at that path.
 - **Enclosing captures.** A capture block may also open the selector or follow an
@@ -427,7 +427,7 @@ and origin.
   the API format, with no conversion code. A pair of such shapes is a data mapping.
 - A projection maps one value to one value. Mapping rows is `each`.
 
-## Encoding and profiles
+## Encoding
 
 Shapes, slot namespaces, templates, codec tables, policies and effects have a
 canonical JSON encoding, so programs and runs are storable, comparable and
@@ -468,28 +468,257 @@ inspectable.
   with an identical signature.
 - Enum members and codes are references: `"$Policy.Drop"`, `"$Mortgage.RootMismatch"`.
   A policy with options encodes as `{"$": "Policy.Drop", "on": ["$Failure.Shape"]}`.
+- `decode(Encoded, Profile?)` rebuilds configuration. Without a profile it trusts its
+  input as host configuration, within the library's size limits; caller input is
+  always decoded under a profile (below).
 
-A **profile** restricts the encoding for callers: permitted types, shapes, slots,
-constraints, derivations and codecs, plus node, depth and size budgets. A data shape
-is an encoded shape conforming to the host's profile; it is decoded, checked and
-compiled into a plan. It cannot introduce a term, path, predicate or effect the host
-did not register.
+## Profiles
 
-Domain profiles offer compact request formats that compile into the general form or
-directly into a plan. The selections/relations request is the first:
+A **profile** is the host's statement of what a caller may say: the terms an encoded
+shape may reference, the constructors it may use, the request formats it may send,
+and the budgets that bound its size. A profile governs the language of caller input;
+`env.policy` governs execution: capabilities, calls, retries and concurrency
+(spec-005). A caller never sends, names or widens a profile.
+
+```text
+AdvisorProfile = profile {
+  constructors: [loose, either, refine],
+  types:        [Text, Int, DateTime, Null],
+  shapes:       [ClientRow],
+  slots:        [Client],
+  constraints:  [Positive, DateOnly],
+  derivations:  [],
+  codecs:       [CountryName, DatePattern],
+  requests:     {SelectionRequest: {versions: [1], maxSelections: 8, maxRelations: 8,
+                                    entitySets: {Clients: [GivenNames, FamilyName, BirthDate],
+                                                 Households: []},
+                                    relations: [HouseholdHasMemberPerson]}},
+  budgets:      {maxDepth: 16, maxNodes: 2000, maxBytes: 65536}}
+```
+
+| Element | Holds | Permits |
+| --- | --- | --- |
+| `constructors` | Constructor names (`loose`, `tuple`, `either`, ...) | Encoded operators of those names |
+| `types`, `shapes`, `constraints`, `derivations`, `codecs` | Registered names | References to those names |
+| `slots` | Slot or slot namespace names | References to those slots; a namespace permits its own slots |
+| `requests` | Request format name → format options, always including `versions` | Requests in that format, under its options |
+| `budgets` | `maxDepth`, `maxNodes`, `maxBytes` | Caller input within those bounds |
+
+- A profile is configuration. It is registered by name and declared by the host.
+  `env.policy.profile` names the profile applied to caller input.
+- A profile encodes as `{"$profile": {name, constructors?, types?, shapes?, slots?,
+  constraints?, derivations?, codecs?, requests?, budgets?}}`. Constructors are
+  written as their names (`"loose"`), registered terms as references (`"$Client"`),
+  `requests` as an object keyed by format name, and `budgets` as numbers. Empty
+  elements are omitted. Decoding a registered name requires an equal encoding, as
+  for codecs. A caller never sends `$profile`, `$codec` or an effect: under a
+  profile, each is refused.
+- A profile is an allow-list. Whatever it does not list is refused; there is no
+  deny-list and no pattern. An empty profile admits only plain structs, one-item
+  lists and literals.
+- Two names permit families: a slot namespace permits its own slots but not those of
+  nested namespaces, as nesting confers nothing; a codec family permits its
+  instances, whose arguments are still checked against the family's parameters.
+- Permission governs what the caller writes, not what registered terms contain. A
+  permitted shape `$ClientRow` brings its slots, codecs and constraints without
+  listing them, so a host exposes a vetted shape by permitting the shape rather than
+  its parts.
+- Every name a profile lists must be registered, and each format's options are
+  checked by that format when the profile is declared. A profile's budgets never
+  exceed the library's limits.
+
+### Decoding under a profile
+
+`decode(Encoded, Profile)` admits caller input in three steps, each completing
+before the next begins:
+
+1. **Data-only check.** The input must be JSON values, acyclic, free of prototype
+   keys, and within the profile's depth, node and byte budgets. An overrun is a
+   `Failure.Budget` with code `Profile.Exceeded`, raised before the input is
+   traversed further.
+2. **Permission.** Every constructor and reference is checked against the profile.
+   Refusals are collected, as matching collects issues, into one `Failure.Contract`
+   whose issues are `{code: Profile.Forbidden, path}`. A name outside the profile is
+   refused with the same code whether or not it is registered, so refusals never
+   disclose the host's vocabulary.
+3. **Construction.** The decoded terms are built with the same checks as
+   programmatically built configuration (slot shapes, codec arguments, gather
+   positions, pattern placeholders). A failure is a `Failure.Contract` with its code.
+
+The result is configuration the host could have written itself: it holds only
+registered terms and literals, and introduces no term, path, predicate or effect the
+host did not register. Decoding performs no effects.
+
+`describe(Profile)` returns the vocabulary a profile permits, as data:
+`{constructors, types, shapes, slots, constraints, derivations, codecs, requests}`.
+Shapes and slots map names to encoded shapes, derivations to their signatures
+`{inputs, output, gaps, examples?}`, codecs to their encoded declarations, and
+request formats to their options plus `gaps`. A host's `CatalogDescribe` stage
+returns it. A term outside the profile is never described.
+
+## Requests and plans
+
+A caller asks for work by sending a **request**: data in a request format the profile
+permits. The host compiles the request into a **plan**: a data value stating what a
+run will do. Compiling performs no effects, so a plan can be previewed, stored and
+compared before anything runs.
+
+```text
+RequestPrepare: RequestValidate → PlanCompile
+ExtractionPlan: RequestPrepare
+```
+
+A run then executes the plan, as `ExtractionRun` does in
+[spec-005](spec-005-shape_pipelines_stages.md#pipeline-declaration).
+
+### Model
+
+| Entity | Identity | Holds | Owner |
+| --- | --- | --- | --- |
+| Request format | Registered name, plus a version per request | A validator, a compiler, its option shape, its gap codes | Host vocabulary |
+| Request | None: a value | `version` and format-defined fields | Caller |
+| Plan | None: a value, equal by JSON equality | `request`, `steps`, `allow`, `budgets`, `gaps` | The run that compiled it |
+| Step | Index in `steps` | A registered stage or domain step name and literal arguments | Plan |
+| Plan gap | `{code, path}` | A declared code; a path of keys into the request | Plan |
+
+- A request format is registered like a codec, by
+  `request(Name, versions, options, validate, compile, gaps)`. Its gap codes are
+  `<Format>.<Reason>`, as for codecs. `options` is the shape of the format's profile
+  options other than `versions`, checked when a profile is declared.
+- `validate(Options, Value, Catalog) → Request` and
+  `compile(Options, Request, Catalog) → {steps, allow, gaps}` are pure functions.
+  `Catalog` is the host's vocabulary entry for the format, `env.vocabulary[Format]`.
+  The validator collects every issue into one `Failure.Contract`; the compiler raises
+  a gap code only if the format declares it, otherwise it is a `Defect`.
+- The combinators `validate(Format)` and `plan(Format)` build the `RequestValidate`
+  and `PlanCompile` stages (spec-005). A host names them in its stage namespace.
+- A request carries the format's `version`. A missing version is `Issue.Missing`;
+  a version the profile does not list is refused with `Profile.Forbidden`.
+- A plan holds:
+  - `request`: the validated, normalised copy of the request, so a plan describes
+    itself;
+  - `steps`: the work, in host declaration order, each `{step, arguments?}` naming
+    a host step and carrying only literal arguments;
+  - `allow`: the operations or capabilities the steps need, in step order;
+  - `budgets`: the integer `max…` entries of `env.policy` the run will be bound to;
+  - `gaps`: `{code, path}` for each thing requested but impossible to supply, known
+    before any effect. The code is written as its qualified name.
+- Plans are data. They encode canonically and never contain code, closures or
+  handles.
+
+### Operations
+
+| Operation | Input → output | Fails with |
+| --- | --- | --- |
+| `RequestValidate` | Caller data → validated request | `Failure.Budget` with `Profile.Exceeded` over the profile's budgets; `Failure.Contract` with `Profile.Forbidden` when no profile permits the format, or with issues for a malformed or forbidden request |
+| `PlanCompile` | Validated request → plan | `Failure.Contract` with `Profile.Forbidden` when `allow` exceeds `env.policy.allow`; `Failure.Defect` for an undeclared gap code or a catalog that names an unknown step |
+| Running a plan | Plan → output and ledger | As its steps |
+
+### Constraints
+
+- **Refusal and gaps are distinct.** What is malformed or outside the profile or
+  policy is refused, and nothing runs. What is permitted but cannot be supplied
+  (no correspondence, no admitted supplier) is a plan gap: the plan still runs and
+  supplies the rest.
+- **A request only chooses.** It selects among registered alternatives and supplies
+  literals. It never adds a step, binding, selector, path or operation, and step
+  order comes from the host's declarations, never from the request.
+- **Compilation is deterministic.** An equal request, vocabulary, profile and policy
+  compile to an equal plan.
+- **A plan runs as compiled.** A run executes exactly the plan's steps under its
+  `allow` and `budgets`, and does not reread the request to add work. It reports
+  each plan gap once to the ledger, so coverage reports it as `Coverage.Unmapped` or
+  `Coverage.NotSupplied`.
+- **A plan is bound to its environment.** It runs only where vocabulary, profile and
+  policy equal those it was compiled under; elsewhere it is recompiled from its
+  `request`, and the stored plan is not trusted.
+
+### Selection requests
+
+`SelectionRequest` is the first request format. A caller selects
+entities by type and asks for relations between the selections.
 
 ```json
 {"version": 1,
- "selections": {"People": {"from": "Clients", "attributes": ["GivenNames", "BirthDate"]}},
- "relations": [{"type": "HouseholdHasMemberPerson", "participants": {"source": "Household", "target": "People"}}]}
+ "selections": {"People": {"from": "Clients", "attributes": ["GivenNames", "BirthDate"]},
+                "Household": {"from": "Households", "attributes": []}},
+ "relations": [{"type": "HouseholdHasMemberPerson",
+                "participants": {"source": "Household", "target": "People"}}]}
 ```
 
-Caller aliases are PascalCase. General caller-sent templates are deferred until a
-pipeline needs them.
+- An **entity set** is a host-registered, named set of entities of one type
+  (`Clients`), with the attributes it can supply and the discovery it requires. The
+  term avoids `selector`, which names paths here.
+- A **selection** binds a caller **alias** to an entity set and a list of attributes.
+  Aliases are PascalCase, at most 64 characters, and name outputs only: they never
+  decide which entities are members.
+- A **relation request** names a registered relation type and binds each of its roles
+  to one alias or a list of aliases.
 
-## Still to draft
+| Element | Cardinality | Constraint |
+| --- | --- | --- |
+| Request → selections | 1 to `maxSelections` | Aliases unique |
+| Selection → entity set | Exactly one | Permitted by the profile's `entitySets` |
+| Selection → attributes | 0 or more, distinct | Each supplied by the entity set and permitted for it; an empty list selects entities only, for example as relation participants |
+| Request → relations | 0 to `maxRelations` | Each relation type at most once, permitted by `relations` |
+| Relation → roles | Exactly the relation type's roles | Each role binds at least one alias |
+| Role → aliases | 1 or more | Each alias's entity set has the role's participant type |
 
-1. Profile format and the decoding of selections/relations into plans. Deferred until
-   a pipeline consumes caller-sent requests.
-2. Index access (`a[0]`) in selectors or shapes. Selectors exclude indexes on
-   purpose; a need for them has not yet outweighed that.
+Validation refuses, as `Failure.Contract`, any unknown key, unsupported version,
+forbidden or unknown entity set, attribute or relation type, and any violated
+cardinality above.
+
+Compilation adds, for each selection, the discovery its entity set requires and a
+supplier for each attribute; for each relation, a supplier of its links. When none
+can be added it records a plan gap at the request path:
+
+| Code | Condition | Coverage |
+| --- | --- | --- |
+| `SelectionRequest.Unmapped` | No correspondence supplies the attribute or relation | `Unmapped` |
+| `SelectionRequest.Unresolved` | Correspondences exist, but none is reviewed and implemented | `Unmapped` |
+| `SelectionRequest.NotSupplied` | A correspondence exists, but no admitted step supplies its source | `NotSupplied` |
+| `SelectionRequest.ReferenceUnselected` | A reference attribute's target type has no selection in the request | `NotSupplied` |
+
+The catalog, `env.vocabulary.SelectionRequest`, is host data:
+
+```json
+{"steps": {"MortgageRetrieve": {"capability": "mortgage_read"},
+           "ClientsRetrieve": {"capability": "client_read", "requires": ["MortgageRetrieve"]}},
+ "entitySets": {"Clients": {"type": "Person", "requires": ["MortgageRetrieve"],
+                            "attributes": {"GivenNames": {"correspondences": [{"supplier": "ClientsRetrieve", "resolved": true}]},
+                                           "Household": {"correspondences": [], "reference": "Household"}}}},
+ "relations": {"HouseholdHasMemberPerson": {"roles": {"source": "Household", "target": "Person"},
+                                            "correspondences": []}}}
+```
+
+- `steps` is ordered: its order is the plan's step order. Adding a step adds the
+  steps it `requires`, transitively.
+- A correspondence is resolved when it has been reviewed and implemented. Its
+  `supplier` is admitted when it names a catalog step. Every admitted supplier of a
+  resolved correspondence is added.
+- An attribute or relation records at most one gap: the first of `Unmapped`,
+  `Unresolved` and `NotSupplied` that applies. Otherwise, it records
+  `ReferenceUnselected` when the attribute references a type no selection has.
+
+The run's output is keyed by alias, and relation links name participants only by
+alias. Record shapes and materialization belong to the domain, not to this
+specification.
+
+## Trade-offs and decisions
+
+- **No index access.** Selectors and shapes have no index form (`a[0]`). A position
+  in a source list rarely carries meaning a slot cannot state, and a positional pick
+  hides the other items. A fixed position is matched with `Tuple` and `rest`
+  (`Tuple($Client.Primary, rest(Any))`); plural data is enumerated with `*` and joined
+  on a shared slot; `$Location` keeps the index of each occurrence. Revisit only for
+  a concrete pipeline that none of these serve.
+- **No caller-sent templates.** Callers choose among host templates through request
+  formats and send shapes only. General caller templates are deferred until a
+  pipeline needs them; they would need a profile element for template constructors
+  and derivations.
+- **Flat profiles.** Profiles do not inherit or compose. Hosts with many similar
+  profiles may build them programmatically; composition is open if that proves
+  insufficient.
+- **JSON requests only.** A domain may offer a bounded text syntax for authoring
+  requests, but it must parse into the JSON request and pass
+  the same validation. Agents send JSON.

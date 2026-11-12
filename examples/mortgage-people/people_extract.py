@@ -4,9 +4,13 @@ PeopleExtract: MortgageRetrieve → MortgageValidate → MortgageClientsSelect �
 """
 from __future__ import annotations
 
+import asyncio
+import json
+from pathlib import Path
+
 from hexa.shapes import Any, Text, Int, DateTime, DateOnly, Positive, Null, loose, either, slots, codes, codec, Location
 from hexa.combinators import stages, pipe, guard, select, each, project, collect, Policy
-from hexa.runtime import join, p
+from hexa.runtime import join, p, run
 
 # -----------------------------------------------------------------------------
 #
@@ -68,5 +72,10 @@ def peopleExtractEnvironment(responses):
 	"""Answer requests using a path-to-response mapping in `responses`."""
 	return {"root": {"mortgage": 42}, "policy": {"maxGaps": 100, "maxConcurrency": 2},
 		"RequestSend": lambda request, context: responses[request["path"]]}
+
+if __name__ == "__main__":
+	responses = json.loads((Path(__file__).resolve().parent / "fixtures" / "responses.json").read_text())
+	result = asyncio.run(run(peopleExtractEnvironment(responses), People.PeopleExtract))
+	print(json.dumps(result, indent=2))
 
 # EOF

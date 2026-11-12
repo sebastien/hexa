@@ -5,7 +5,9 @@ from __future__ import annotations
 from copy import deepcopy
 
 from .codec import codec
-from .core import LIMITS, REGISTRY, Constructor, Failure, Issue, Member, Namespace, Runtime, thaw, validateData
+from .core import LIMITS, REGISTRY, Constructor, Failure, Issue, Member, Namespace, Profile, Runtime, thaw, validateData
+from . import profile as profiles
+from .profile import CONSTRUCTOR_NAMES, ProfileDefinition, RequestFormat, admitData, permissionIssues
 from .shape import Codec, CodecFamily, Constraint, Shape, Slot, Tuple, compileShape, either, gather, optional, parsed, pattern, refine, rest, tolerant, via
 from .template import Transform, compileTemplate, derive
 
@@ -15,7 +17,7 @@ from .template import Transform, compileTemplate, derive
 #
 # -----------------------------------------------------------------------------
 
-__all__ = ["encode", "decode"]
+__all__ = ["encode", "decode", "describe"]
 
 # NOTE: `$` keys accepted next to each operator in an encoded object.
 OPERATOR_OPTIONS = {"$": {"via", "optional", "arguments", "value", "stage"}, "$refine": {"constraints"}, "$derive": {"arguments"}}
@@ -49,6 +51,23 @@ def encodeCodec(value):
 	if value.examples:
 		definition["examples"] = thaw(value.examples)
 	return {"$codec": definition}
+
+
+def encodeProfile(value):
+	definition = {"name": value.name}
+	if value.constructors:
+		definition["constructors"] = list(value.constructors)
+	for key in ("types", "slots", "constraints", "derivations", "codecs"):
+		items = getattr(value, key)
+		if items:
+			definition[key] = ["$" + (item.args[0] if key == "types" else item.name) for item in items]
+	if value.shapes:
+		definition["shapes"] = ["$" + name for name, _ in value.shapes]
+	if value.requests:
+		definition["requests"] = {item.name: thaw(options) for item, options in value.requests}
+	if value.budgets:
+		definition["budgets"] = dict(value.budgets)
+	return {"$profile": definition}
 
 
 def encodeShape(value):
@@ -95,6 +114,8 @@ def encode(value: object) -> object:
 		return {key: encode(item) for key, item in value.members.items()}
 	if isinstance(value, (Codec, CodecFamily)):
 		return encodeCodec(value)
+	if isinstance(value, ProfileDefinition):
+		return encodeProfile(value)
 	if isinstance(value, Shape):
 		return encodeShape(value)
 	# NOTE: Higher layers (stages, policies, effects) encode themselves.
@@ -115,13 +136,26 @@ def encode(value: object) -> object:
 	raise TypeError("configuration cannot be encoded")
 
 
-def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMITS["maxDepth"], maxNodes: int = LIMITS["maxNodes"], maxBytes: int = LIMITS["maxBytes"]) -> object:
+def decode(value: object, profile: ProfileDefinition | None = None, *, registry: dict | None = None, maxDepth: int = LIMITS["maxDepth"], maxNodes: int = LIMITS["maxNodes"], maxBytes: int = LIMITS["maxBytes"]) -> object:
 	"""Resolve bounded JSON configuration through an explicit registry.
 
 	Encoded configuration is data, so anything malformed is a `Failure.Contract`.
+	Caller input is decoded under a `profile`: its budgets replace the size limits
+	(`Profile.Exceeded`), and every term it does not permit is refused
+	(`Profile.Forbidden`) before anything is constructed.
 	"""
-	validateData(value, maxDepth=maxDepth, maxNodes=maxNodes, maxBytes=maxBytes)
 	catalog = REGISTRY if registry is None else registry
+	if profile is not None:
+		if not isinstance(profile, ProfileDefinition):
+			raise TypeError("profile must be a declared profile")
+		admitData(value, profile)
+		issues = permissionIssues(value, profile, catalog)
+		if issues:
+			failure = Failure(Failure.Contract, Profile.Forbidden, issues[0]["path"])
+			failure.issues = issues
+			raise failure
+	else:
+		validateData(value, maxDepth=maxDepth, maxNodes=maxNodes, maxBytes=maxBytes)
 
 	def resolve(name):
 		if name not in catalog:
@@ -164,6 +198,32 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 			raise Failure(Failure.Contract, Runtime.MemberUnknown)
 		return codec(name, source=visit(definition["source"]), canonical=visit(definition["canonical"]), map=definition["map"], gaps=definition.get("gaps", {}))
 
+	def visitProfile(item):
+		definition = item["$profile"]
+		name = definition["name"]
+		if name in catalog:
+			result = catalog[name]
+			if not isinstance(result, ProfileDefinition) or encode(result) != item:
+				raise Failure(Failure.Contract, Issue.Mismatch)
+			return result
+		if set(definition) - {"name", "constructors", "types", "shapes", "slots", "constraints", "derivations", "codecs", "requests", "budgets"}:
+			raise Failure(Failure.Contract, Issue.Unexpected)
+		references = {key: [visit(child) for child in definition.get(key, [])] for key in ("types", "slots", "constraints", "derivations", "codecs")}
+		shapes = {}
+		for child in definition.get("shapes", []):
+			if not isinstance(child, str) or not child.startswith("$"):
+				raise Failure(Failure.Contract, Issue.Mismatch)
+			shapes[child[1:]] = resolve(child[1:])
+		requests = {}
+		for key, options in definition.get("requests", {}).items():
+			format = resolve(key)
+			if not isinstance(format, RequestFormat):
+				raise Failure(Failure.Contract, Issue.Mismatch)
+			requests[format] = options
+		constructors = [CONSTRUCTOR_NAMES[child] for child in definition.get("constructors", [])]
+		# NOTE: `decode`'s `profile` parameter shadows the declaration function here.
+		return profiles.profile(name, constructors=constructors, shapes=shapes, requests=requests, budgets=definition.get("budgets"), **references)
+
 	def visit(item):
 		if isinstance(item, str):
 			if item.startswith("$$"):
@@ -190,6 +250,8 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 			return visitReference(item)
 		if operator == "$codec":
 			return visitCodec(item)
+		if operator == "$profile":
+			return visitProfile(item)
 		if operator in ("$tuple", "$either"):
 			return (Tuple if operator == "$tuple" else either)(*(visit(child) for child in argument))
 		if operator == "$loose":
@@ -212,5 +274,32 @@ def decode(value: object, registry: dict | None = None, *, maxDepth: int = LIMIT
 	except (TypeError, ValueError, KeyError) as error:
 		# Constructors reject malformed arguments as programming errors; here they came from data.
 		raise Failure(Failure.Contract, Issue.Mismatch) from error
+
+
+
+def describe(profile: ProfileDefinition) -> dict:
+	"""Describe exactly the vocabulary `profile` permits, as data for `CatalogDescribe`."""
+	if not isinstance(profile, ProfileDefinition):
+		raise TypeError("profile must be a declared profile")
+	slots = {}
+	for item in profile.slots:
+		for child in (item.members.values() if isinstance(item, Namespace) else (item,)):
+			slots[child.name] = encode(child.shape)
+	derivations = {}
+	for item in profile.derivations:
+		description = {"inputs": [encode(shape) for shape in item.inputs], "output": encode(item.output), "gaps": [gap.short for gap in item.gaps]}
+		if item.examples:
+			description["examples"] = thaw(item.examples)
+		derivations[item.name] = description
+	return {
+		"constructors": list(profile.constructors),
+		"types": ["$" + item.args[0] for item in profile.types],
+		"shapes": {name: encode(shape) for name, shape in profile.shapes},
+		"slots": slots,
+		"constraints": ["$" + item.name for item in profile.constraints],
+		"derivations": derivations,
+		"codecs": {item.name: encodeCodec(item) for item in profile.codecs},
+		"requests": {item.name: {"gaps": [gap.short for gap in item.gaps], **thaw(options)} for item, options in profile.requests},
+	}
 
 # EOF

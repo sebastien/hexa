@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
+import hexa
 from hexa.combinators import pipe, select, stages
 from hexa.runtime import inert, join, run
 from hexa.shapes import decode, encode
@@ -38,6 +42,12 @@ class ConformanceTests(unittest.IsolatedAsyncioTestCase):
 	async def test_live(self):
 		env = Example.peopleExtractEnvironment(fixture("responses"))
 		self.assertEqual(await run(env, Example.People.PeopleExtract), fixture("expected"))
+
+	def test_script_output(self):
+		result = subprocess.run([sys.executable, str(EXAMPLE_PATH / "people_extract.py")],
+			cwd=EXAMPLE_PATH, env={**os.environ, "PYTHONPATH": str(Path(hexa.__file__).resolve().parent.parent)},
+			capture_output=True, text=True, check=True)
+		self.assertEqual(json.loads(result.stdout), fixture("expected"))
 
 	async def test_replay(self):
 		def forbidden(*args):

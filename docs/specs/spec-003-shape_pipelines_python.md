@@ -16,12 +16,12 @@ as domain languages, may load it lazily and stay usable without it.
 
 | Module | Exports |
 | --- | --- |
-| `shapes.py` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `Failure`, `Gap`, `Issue` |
-| `combinators.py` | Combinators, `Policy`, `backoff` |
+| `shapes.py` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `profile`, `request`, `describe`, `SelectionRequest`, `Failure`, `Gap`, `Issue`, `Profile` |
+| `combinators.py` | Combinators (including `validate` and `plan`), `Policy`, `backoff` |
 | `runtime.py` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
 `shapes.py` is a façade over the internal modules `shape` (algebra and matching),
-`template`, `codec`, `selector`, `encoding` and `vocabulary`; `combinators.py` and
+`template`, `codec`, `selector`, `encoding`, `profile` and `vocabulary`; `combinators.py` and
 `runtime.py` build on `stage` and `instructions`. Programs import only the three
 public modules.
 
@@ -151,6 +151,44 @@ CrmClient = loose({"id": Client.Id, "countryName?": Client.Country @ CountryName
   `{"input": "20260915", "output": "2026-09-15"}`,
   `{"input": "2026-02-30", "gap": "Invalid"}`. Examples of a parameterised codec add
   `"arguments": ["YYYYMMDD"]`.
+
+## Profiles and requests
+
+```python
+Advisor = profile("AdvisorProfile",
+    constructors=[loose, either, refine], types=[Text, Int], shapes={"ClientRow": ClientRow},
+    slots=[Client], constraints=[Positive], codecs=[CountryName, DatePattern],
+    requests={SelectionRequest: {"versions": [1], "maxSelections": 8, "maxRelations": 8,
+                                 "entitySets": {"Clients": ["GivenNames", "BirthDate"]},
+                                 "relations": ["HouseholdHasMemberPerson"]}},
+    budgets={"maxDepth": 16, "maxNodes": 2000})
+
+shape = decode(callerShape, Advisor)
+
+class Extraction(stages):
+    RequestValidate = validate(SelectionRequest)
+    PlanCompile = plan(SelectionRequest)
+    RequestPrepare = pipe(RequestValidate, PlanCompile)
+
+env = {"policy": {"profile": Advisor, "allow": ["client_read"]},
+       "vocabulary": {"SelectionRequest": catalog}}
+```
+
+- `profile(Name, *, constructors, types, shapes, slots, constraints, derivations,
+  codecs, requests, budgets)` takes the objects themselves, never names. Constructors
+  are the constructor functions (`loose`, `Tuple`, `rest`, `either`, `refine`,
+  `pattern`, `tolerant`, `gather`, `parsed`, `derive`). `shapes` is a dict, because
+  Python shapes have no names: it registers each shape under its key, so callers
+  reference `"$ClientRow"`. `slots` takes slots or slot namespaces. `requests` maps
+  request formats to their option dicts.
+- A mistake in a `profile` or `request` call raises `TypeError` or `ValueError`.
+  Redeclaring a name with different contents raises `Runtime.NameRedeclared`.
+- `decode(value, profile=None, *, registry=None, maxDepth=…, maxNodes=…,
+  maxBytes=…)`: with a profile, the profile's budgets replace the keyword limits.
+- `request(Name, *, versions, options, validate, compile, gaps=())` declares a
+  request format; `validate` and `compile` are plain functions, as for codecs.
+- `env.policy["profile"]` holds the profile object and `env.policy["allow"]` a list
+  of strings. The runtime rejects other values with `Failure.Contract`.
 
 ## Enums and codes
 
@@ -400,7 +438,7 @@ class People(stages):
         MortgageClientsSelect, MortgageClientsProject))
 ```
 
-[`examples/mortgage-people`](examples/README.md) has this example with fixtures.
+[`examples/mortgage-people`](../../examples/README.md) has this example with fixtures.
 
 Tests use `python -m unittest` (or pytest, which runs them unchanged). Drive stages
 by hand with `inert(env)` to assert on yielded effect descriptions, replay journals

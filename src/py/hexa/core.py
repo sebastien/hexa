@@ -138,9 +138,9 @@ def namespace(name, names):
 Issue = namespace("Issue", "Mismatch Missing Unexpected Constraint CaptureConflict".split())
 Runtime = namespace("Runtime", "CloseYielded MemberUnknown NameRedeclared NativeAwaitable PathSegmentInvalid ReplayMismatch SlotRedeclared SlotUnknown StageRenamed StrandUnjoined StrandConflict".split())
 Ledger = namespace("Ledger", "Gap Loss".split())
-# NOTE: Reserved for coverage reporting, which spec-004 lists as still to draft.
 Coverage = namespace("Coverage", "Supplied SourceNull NotSupplied Unmapped Conflicting".split())
 Checks = namespace("Checks", "Boundary Off".split())
+Profile = namespace("Profile", "Exceeded Forbidden".split())
 
 
 class Failure(Exception, metaclass=ImmutableMeta):

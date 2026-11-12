@@ -6,9 +6,13 @@ Programs following
 example imports the implemented `hexa` package and runs on Python 3.14+.
 JavaScript remains a syntax-only example until its binding exists.
 
-From the repository root, run `python3 -m unittest tests.test_conformance -v` to
+From the repository root, install the Python package in editable mode with
+`python3 -m pip install -e .`, then run `python3 -m unittest tests.test_conformance -v` to
 check live fixture responses, journal replay, inert effects, provenance and shape
 encodings. The shared JSON fixtures are unchanged.
+
+Run `python3 examples/mortgage-people/people_extract.py` to print the fixture-backed
+pipeline result (person records and ledger) as JSON.
 
 ## Mortgage people
 

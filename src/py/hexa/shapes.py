@@ -1,14 +1,15 @@
 """Module: hexa.shapes — Match, capture, convert and reproject JSON data.
 
-Public façade over `shape`, `template`, `codec`, `selector`, `encoding` and
-`vocabulary`; import canonical names from here.
+Public façade over `shape`, `template`, `codec`, `selector`, `encoding`,
+`profile` and `vocabulary`; import canonical names from here.
 """
 
 from __future__ import annotations
 
 from .codec import codec
-from .core import Failure, Gap, Issue
-from .encoding import decode, encode
+from .core import Failure, Gap, Issue, Profile
+from .encoding import decode, describe, encode
+from .profile import SelectionRequest, profile, request
 from .selector import matches
 from .shape import (
 	Any, Bool, Decimal, DateTime, Float, Instant, Int, List, Null, Num, Struct, Text, Tuple, __,
@@ -31,7 +32,8 @@ __all__ = [
 	"derive", "codec", "transform", "lossy", "codes", "Location", "Origin", "DateOnly",
 	"Timed", "Zoned", "Positive", "Nonempty", "parts", "InstantOffset", "DecimalText",
 	"DatePattern", "errors", "check", "capture", "expand", "reshape", "matches", "evidence",
-	"parsed", "encode", "decode", "Failure", "Gap", "Issue"
+	"parsed", "encode", "decode", "describe", "profile", "request", "SelectionRequest",
+	"Failure", "Gap", "Issue", "Profile"
 ]
 
 # EOF

@@ -16,6 +16,7 @@ from .core import (
 	failureData, failureFromData, freeze, jsonEqual, normalise, pointer, retryable, unescapeSegment, validateData,
 )
 from .instructions import Effect, Fork, Join, LedgerRead, Parallel, Race, Report, effect, fork, join, ledger, race, report
+from .profile import ProfileDefinition
 from .shape import typeMatches
 from .stage import asStage
 
@@ -89,6 +90,10 @@ def snapshot(environment):
 	for key in ("maxGaps", "maxConcurrency", "maxAttempts", "maxDepth", "maxNodes", "maxBytes"):
 		if type(policy[key]) is not int or policy[key] < (0 if key == "maxGaps" else 1):
 			raise Failure(Failure.Contract, Issue.Constraint)
+	if "profile" in policy and not isinstance(policy["profile"], ProfileDefinition):
+		raise Failure(Failure.Contract, Issue.Mismatch)
+	if "allow" in policy and (not isinstance(policy["allow"], (list, tuple)) or any(type(item) is not str for item in policy["allow"])):
+		raise Failure(Failure.Contract, Issue.Mismatch)
 	if policy["contracts"] not in (Checks.Boundary, Checks.Off):
 		raise Failure(Failure.Contract, Runtime.MemberUnknown)
 	if type(policy["retry"]["attempts"]) is not int or not 1 <= policy["retry"]["attempts"] <= policy["maxAttempts"]:

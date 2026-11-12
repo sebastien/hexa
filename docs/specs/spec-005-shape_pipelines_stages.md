@@ -112,6 +112,8 @@ Boundary stages declare contracts; internal hand-written stages may use a one-li
 | `retry(S, Options?)` | `a → b` | Rerun `S` on transient effect failures |
 | `always(S, T)` | `a → b` | Run `T` with `{value \| failure, ledger}` whether `S` succeeds or fails, except on `Cancel`; re-raise a failure afterwards |
 | `collect(S)` | `a → {value, ledger}` | Run `S`; return the ledger entries it reported alongside its value |
+| `validate(Format)` | `Value → Request` | Admit caller data as a request of `Format` under `env.policy.profile` (spec-004) |
+| `plan(Format)` | `Request → Plan` | Compile a validated request into a plan, without effects (spec-004) |
 
 - Combinators are pure constructors: building a stage performs no work and holds no
   run state.
@@ -443,9 +445,10 @@ per-run options `signal`, `replay` and `record`.
   never spread or merged into the environment.
 - Per-run options may be overlaid; authority or policy changes require a fresh
   validated snapshot. The environment is read-only during a run.
-- `env.policy` is host configuration: budgets and allow-lists, `contracts` (a `Checks`
-  member), `retry`, `maxAttempts`,
-  `maxGaps` and `maxConcurrency`.
+- `env.policy` is host configuration: budgets and allow-lists, `profile` (the
+  profile applied to caller input, spec-004), `allow` (the operations or capabilities
+  a plan may need; absent permits all), `contracts` (a `Checks` member),
+  `retry`, `maxAttempts`, `maxGaps` and `maxConcurrency`.
 - Operations are named Subject + Verb and may return values or promises. Each has a
   default, either a no-op or a failure. Stages see them only through the stand-in.
 - The vocabulary registers types, constraints, derivations, transforms and codecs by
