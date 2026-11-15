@@ -1,0 +1,16 @@
+{
+	"name": "hexa",
+	"version": "0.1.0",
+	"description": "Shape-directed pipelines with inert effects and replay",
+	"type": "module",
+	"exports": {
+		"./shapes.js": "./src/js/hexa/shapes.js",
+		"./combinators.js": "./src/js/hexa/combinators.js",
+		"./runtime.js": "./src/js/hexa/runtime.js"
+	},
+	"files": ["src/js/hexa"],
+	"scripts": {
+		"test": "bun test tests/js",
+		"example": "bun examples/mortgage-people/run.js"
+	}
+}

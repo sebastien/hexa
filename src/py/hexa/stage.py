@@ -6,7 +6,7 @@ import inspect
 from dataclasses import dataclass
 
 from .core import REGISTRY, Checks, Failure, Issue, Runtime, register
-from .shape import check, errors
+from .shape import check, compileShape, errors
 
 # -----------------------------------------------------------------------------
 #
@@ -14,7 +14,7 @@ from .shape import check, errors
 #
 # -----------------------------------------------------------------------------
 
-__all__ = ["Stage", "asStage"]
+__all__ = ["Stage", "asStage", "stage"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,5 +92,23 @@ def asStage(value):
 	if not inspect.isgeneratorfunction(value):
 		raise TypeError("stages must be generators; use lift for pure functions")
 	return Stage(value, "", value.__name__)
+
+
+def stage(*arguments, input=None, output=None):
+	"""Name a computed stage or attach explicit call contracts."""
+	name = arguments[0] if arguments and isinstance(arguments[0], str) else None
+	values = arguments[1:] if name is not None else arguments
+	if not values:
+		return lambda value: stage(*arguments, value, input=input, output=output)
+	if len(values) != 1:
+		raise TypeError("stage takes one generator or stage")
+	source = asStage(values[0])
+	result = Stage(source.function, source.combinator, source.name,
+		compileShape(input) if input is not None else source.input,
+		compileShape(output) if output is not None else source.output,
+		source.explicit or input is not None or output is not None)
+	if name is not None:
+		result.bind(name)
+	return result
 
 # EOF

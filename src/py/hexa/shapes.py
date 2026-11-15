@@ -9,7 +9,8 @@ from __future__ import annotations
 from .codec import codec
 from .core import Failure, Gap, Issue, Profile
 from .encoding import decode, describe, encode
-from .profile import SelectionRequest, profile, request
+from .profile import profile, request
+from .selection_request import SelectionRequest
 from .selector import matches
 from .shape import (
 	Any, Bool, Decimal, DateTime, Float, Instant, Int, List, Null, Num, Struct, Text, Tuple, __,

@@ -1,0 +1,38 @@
+{
+	"exports": {
+		"shapes": [
+			"Any", "Bool", "DateOnly", "DatePattern", "DateTime", "Decimal", "DecimalText",
+			"Failure", "Float", "Gap", "Instant", "InstantOffset", "Int", "Issue", "List",
+			"Location", "Nonempty", "Null", "Num", "Origin", "Positive", "Profile",
+			"SelectionRequest", "Struct", "Text", "Timed", "Tuple", "Zoned", "__",
+			"capture", "check", "codec", "codes", "decode", "derive", "describe", "either",
+			"encode", "errors", "evidence", "expand", "gather", "loose", "lossy", "matches",
+			"nullable", "optional", "parsed", "parts", "pattern", "profile", "refine",
+			"request", "reshape", "rest", "slot", "slots", "tolerant", "transform", "via", "where"
+		],
+		"combinators": [
+			"Policy", "admit", "always", "backoff", "bound", "choose", "collect", "each",
+			"fold", "guard", "lift", "otherwise", "parallel", "pipe", "plan", "project",
+			"recover", "retry", "select", "stage", "stages", "tap", "validate", "when"
+		],
+		"runtime": [
+			"Checks", "Coverage", "Ledger", "Runtime", "fork", "inert", "join", "ledger",
+			"p", "race", "report", "run"
+		]
+	},
+	"captureNames": ["evidence", "failed", "losses", "gathered", "copy", "replace", "constructor", "name", "members", "unknown", "then", "toJSON", "prototype"],
+	"reservedNamespaceMembers": ["name", "members", "unknown", "then", "toJSON", "constructor", "prototype", "__proto__"],
+	"validNamespaceMembers": ["Name", "Members", "Unknown", "Then", "ToJSON", "Constructor", "Prototype"],
+	"codecArguments": [
+		{"value": 1, "suffix": "(1)"},
+		{"value": 1.0, "suffix": "(1)"},
+		{"value": -0.0, "suffix": "(0)"},
+		{"value": [1.0, -0.0], "suffix": "([1,0])"},
+		{"value": 1e21, "suffix": "(1e+21)"},
+		{"value": 1e23, "suffix": "(1e+23)"},
+		{"value": 1e-7, "suffix": "(1e-7)"},
+		{"value": 1e-6, "suffix": "(0.000001)"},
+		{"value": 1e20, "suffix": "(100000000000000000000)"},
+		{"value": {"2": 2, "1": 1, "a": 3}, "suffix": "({\"1\":1,\"2\":2,\"a\":3})"}
+	]
+}

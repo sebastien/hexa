@@ -6,12 +6,12 @@ import inspect
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, Profile, backoff, constructor, failureData, freeze, member, retryable, thaw, validateData
+from .core import ABSENT, DEFAULT_DELAY, FAILURE_MEMBERS, Failure, Gap, ImmutableMeta, Issue, Ledger, Namespace, Profile, backoff, constructor, failureData, freeze, member, register, retryable, thaw, validateData, validateMemberNames
 from .profile import RequestFormat, admitData
 from .instructions import LedgerRead, Parallel, Report
 from .selector import matches
 from .shape import Slot, capture, check, compileShape, definiteReferences, errors, mergeCaptures, references, validateShape
-from .stage import Stage, asStage
+from .stage import Stage, asStage, stage
 from .template import compileTemplate, expand, outputShape, validateTemplateReferences
 from .vocabulary import Location, Origin
 
@@ -56,12 +56,12 @@ def fallback(stage):
 	return PolicyValue(Policy.Fallback, asStage(stage))
 
 
-Policy = Namespace("Policy", {
+Policy = register("Policy", Namespace("Policy", {
 	"Abort": member("Policy.Abort"),
 	"Drop": member("Policy.Drop"),
 	"Substitute": constructor("Policy.Substitute", substitute),
 	"Fallback": constructor("Policy.Fallback", fallback),
-})
+}))
 
 
 class StagesMeta(ImmutableMeta):
@@ -69,6 +69,7 @@ class StagesMeta(ImmutableMeta):
 
 	def __new__(metaclass, name, bases, members):
 		if bases:
+			validateMemberNames(members)
 			for key, value in tuple(members.items()):
 				if key.startswith("__"):
 					continue
@@ -174,24 +175,6 @@ def requestOptions(env, format):
 # HIGH-LEVEL API
 #
 # -----------------------------------------------------------------------------
-
-def stage(*arguments, input=None, output=None):
-	"""Name a computed stage or attach explicit call contracts."""
-	name = arguments[0] if arguments and isinstance(arguments[0], str) else None
-	values = arguments[1:] if name is not None else arguments
-	if not values:
-		return lambda value: stage(value, input=input, output=output)
-	if len(values) != 1:
-		raise TypeError("stage takes one generator or stage")
-	source = asStage(values[0])
-	result = Stage(source.function, source.combinator, source.name,
-		compileShape(input) if input is not None else source.input,
-		compileShape(output) if output is not None else source.output,
-		source.explicit or input is not None or output is not None)
-	if name is not None:
-		result.bind(name)
-	return result
-
 
 def lift(function):
 	"""Wrap a pure function as a stage without introducing an effect."""

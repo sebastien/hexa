@@ -21,9 +21,10 @@ as domain languages, may load it lazily and stay usable without it.
 | `runtime.py` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
 `shapes.py` is a façade over the internal modules `shape` (algebra and matching),
-`template`, `codec`, `selector`, `encoding`, `profile` and `vocabulary`; `combinators.py` and
-`runtime.py` build on `stage` and `instructions`. Programs import only the three
-public modules.
+`template`, `codec`, `selector`, `encoding`, `profile`, `selection_request` (the
+concrete selection format) and `vocabulary`; `combinators.py` and `runtime.py`
+build on `stage` and `instructions`. Shared declaration identity and reason
+helpers live in `core`. Programs import only the three public modules.
 
 Import canonical names unchanged; never rename on import. Configure linters to
 allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruff

@@ -12,8 +12,8 @@ from string.templatelib import Template
 from urllib.parse import quote
 
 from .core import (
-	ABSENT, DEFAULT_DELAY, LIMITS, Checks, Coverage, Failure, Issue, Ledger, Member, Namespace, Runtime,
-	failureData, failureFromData, freeze, jsonEqual, normalise, pointer, retryable, unescapeSegment, validateData,
+	ABSENT, DEFAULT_DELAY, LIMITS, Checks, Coverage, Failure, Issue, Ledger, Member, Runtime,
+	entityName, failureData, failureFromData, freeze, jsonEqual, normalise, pointer, retryable, thaw, unescapeSegment, validateData,
 )
 from .instructions import Effect, Fork, Join, LedgerRead, Parallel, Race, Report, effect, fork, join, ledger, race, report
 from .profile import ProfileDefinition
@@ -76,7 +76,7 @@ class Outcome:
 #
 # -----------------------------------------------------------------------------
 
-def snapshot(environment):
+def environmentSnapshot(environment):
 	"""Validate a host environment mapping into a frozen `Environment` and its operations."""
 	if not isinstance(environment, Mapping):
 		raise TypeError("environment must be a mapping")
@@ -144,16 +144,6 @@ def replayIndex(replay):
 	return result
 
 
-def entityName(value):
-	if isinstance(value, str):
-		return value
-	if isinstance(value, Namespace):
-		return value.name
-	if getattr(value, "name", None):
-		return value.name
-	raise TypeError("expected a named program entity")
-
-
 def entryIdentity(entry):
 	"""Identify a ledger entry regardless of whether it was reported as fatal."""
 	return json.dumps({key: value for key, value in entry.items() if key != "fatal"}, sort_keys=True)
@@ -180,7 +170,7 @@ class Run:
 	"""Hold run-wide state shared by every strand: authority, budgets, journal and replay."""
 
 	def __init__(self, environment):
-		self.env, self.operations = snapshot(environment)
+		self.env, self.operations = environmentSnapshot(environment)
 		self.policy = self.env.policy
 		self.record = bool(environment.get("record"))
 		self.hostSignal = environment.get("signal")
@@ -393,7 +383,7 @@ class Strand:
 
 	async def effectOnce(self, value, attempt):
 		"""Perform one attempt of an effect, journalling its result, failure or cancellation."""
-		operation, arguments = value.operation, deepcopy(value.arguments)
+		operation, arguments = value.operation, thaw(value.arguments)
 		self.run.validate(arguments, allowIndexMaps=True)
 		arguments = normalise(arguments)
 		seq = self.run.nextIndex(self.run.sequences, self)
@@ -598,7 +588,7 @@ class Strand:
 
 def inert(env: Mapping) -> Environment:
 	"""Return a frozen environment whose operations only describe effects."""
-	return snapshot(env)[0]
+	return environmentSnapshot(env)[0]
 
 
 def p(template: Template) -> str:

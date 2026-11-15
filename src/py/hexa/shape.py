@@ -7,7 +7,6 @@ values with `errors`, `compatible` matches literals), so they share this module.
 from __future__ import annotations
 
 import inspect
-import json
 import math
 import re
 from copy import deepcopy
@@ -15,8 +14,8 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from .core import (
-	MAX_INT, REGISTRY, Failure, Gap, Issue, Member, Namespace, Runtime,
-	freeze, jsonEqual, member, normalise, pointer, register, thaw, unknownMember, validateData,
+	MAX_INT, NAME_RE, REGISTRY, Failure, Gap, Issue, Member, Namespace, Runtime,
+	codeNamespace, freeze, jsonEqual, jsonLiteral, normalise, pointer, reasonNamed, register, thaw, validateData, validateMemberNames,
 )
 
 # -----------------------------------------------------------------------------
@@ -36,7 +35,6 @@ SLOTS = {}
 DATE_RE = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(?:T([0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?)(Z|[+-][0-9]{2}:[0-9]{2})?)?")
 INSTANT_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{0,8}[1-9])?Z")
 DECIMAL_RE = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?")
-NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*")
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -100,7 +98,7 @@ class Constraint:
 	"""A named pure predicate applied after structural matching."""
 
 	name: str
-	predicate: object = field(compare=False, repr=False)
+	predicate: object = field(repr=False)
 
 	def __rand__(self, shape):
 		return refine(shape, self)
@@ -126,7 +124,7 @@ class Captures(dict):
 
 	def copy(self):
 		result = Captures()
-		result.update(self)
+		result.update({key: deepcopy(value) for key, value in self.items()})
 		result.evidence = deepcopy(self.evidence)
 		result.failed = dict(self.failed)
 		result.losses = list(self.losses)
@@ -213,7 +211,7 @@ class CodecFamily:
 		for value, (_, shape) in zip(arguments, self.params):
 			validateData(value)
 			check(value, shape, Issue.Mismatch)
-		key = json.dumps(arguments, separators=(",", ":"), ensure_ascii=False)
+		key = jsonLiteral(arguments)
 		if key not in self.instances:
 			name = self.name + "(" + key[1:-1] + ")"
 			self.instances[key] = register(name, Codec(name, self.source, self.canonical, self.parse, self.format, self.gaps, self.losses,
@@ -234,15 +232,6 @@ def sameArguments(left, right):
 	if isinstance(left, bool) or isinstance(right, bool):
 		return type(left) is type(right) and left == right
 	return left == right
-
-
-def reasonNamed(reasons, name):
-	"""Return the member of `reasons` whose short name is `name`, as a codec or transform attribute."""
-	if not name.startswith("_"):
-		for item in reasons:
-			if item.short == name:
-				return item
-	raise unknownMember(name, Runtime.MemberUnknown)
 
 
 def asCaptures(captures):
@@ -315,7 +304,11 @@ def dateParts(value):
 
 def typeMatches(value, name):
 	if name == "Any":
-		return True
+		try:
+			validateData(value)
+			return True
+		except Failure:
+			return False
 	if name == "Text":
 		return type(value) is str
 	if name == "Bool":
@@ -485,6 +478,12 @@ def bindCapture(captures, key, value, raw, path, issues, codec=None, gathering=F
 		captures.setdefault(key, value)
 		captures.evidence.setdefault(key, itemEvidence)
 
+
+# -----------------------------------------------------------------------------
+#
+# OPERATIONS
+#
+# -----------------------------------------------------------------------------
 
 # NOTE: Matchers share one signature so `matchShape` can dispatch on `shape.kind`.
 
@@ -668,13 +667,6 @@ def matchShape(value, shape, captures, issues, path=(), *, gathering=False):
 	matcher(value, shape, captures, issues, path, gathering)
 
 
-def codeNamespace(name, names):
-	"""Build an unregistered namespace of interned codes under `name`."""
-	if not NAME_RE.fullmatch(name) or any(not NAME_RE.fullmatch(item) or "." in item for item in names):
-		raise ValueError("invalid code name")
-	return Namespace(name, {item: member(f"{name}.{item}") for item in names})
-
-
 # -----------------------------------------------------------------------------
 #
 # HIGH-LEVEL API
@@ -708,6 +700,7 @@ def slot(name: str, shape: object) -> Slot:
 
 def slots(name: str, **shapes: object) -> Namespace:
 	"""Declare a frozen namespace of typed slots."""
+	validateMemberNames(shapes)
 	return register(name, Namespace(name, {key: slot(f"{name}.{key}", value) for key, value in shapes.items()}, Runtime.SlotUnknown))
 
 
@@ -749,7 +742,7 @@ def nullable(shape: object) -> Shape:
 
 def where(predicate: object, name: str) -> Constraint:
 	"""Register a pure predicate as the constraint `name`, a qualifier such as `"Even"`."""
-	if not isinstance(name, str) or not NAME_RE.fullmatch(name):
+	if not isinstance(name, str) or not NAME_RE.fullmatch(name) or not callable(predicate):
 		raise TypeError("constraints are named by a qualifier string, not a code")
 	return register(name, Constraint(name, predicate))
 

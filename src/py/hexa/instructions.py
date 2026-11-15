@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .core import ABSENT, normalise, validateData
+from .core import ABSENT, freeze, normalise, thaw, validateData
 from .stage import asStage
 
 # -----------------------------------------------------------------------------
@@ -26,10 +26,14 @@ class Effect:
 	"""An inert host operation call with JSON arguments."""
 
 	operation: str
-	arguments: list
+	arguments: tuple
+
+	def __post_init__(self):
+		validateData(self.arguments, allowIndexMaps=True)
+		object.__setattr__(self, "arguments", freeze(normalise(deepcopy(self.arguments))))
 
 	def encoded(self):
-		return {"operation": self.operation, "arguments": deepcopy(self.arguments)}
+		return {"operation": self.operation, "arguments": thaw(self.arguments)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,8 +91,7 @@ class Parallel:
 
 def effect(operation: str, arguments: list) -> Effect:
 	"""Describe a host operation call, validating and normalising `arguments`."""
-	validateData(arguments, allowIndexMaps=True)
-	return Effect(operation, normalise(deepcopy(arguments)))
+	return Effect(operation, arguments)
 
 
 def report(kind, *, target, reason, source=ABSENT, path=ABSENT, fatal=False) -> Report:

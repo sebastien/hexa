@@ -22,9 +22,9 @@ It comes from extraction work: pulling records out of CRM and partner APIs,
 normalising their formats, and reporting what did not fit instead of failing
 or silently guessing. In our view most of such a program is configuration,
 so *hexa* makes the shapes, codecs and pipeline declaration the program, and
-hand-written code the exception. It is a specification first: the Python
-binding is an experimental implementation, the JavaScript binding exists only
-as syntax in the specs and examples, and neither claims full conformance yet.
+hand-written code the exception. It is a specification first: the Python and
+JavaScript bindings are experimental implementations, and neither claims
+full conformance yet.
 
 ## Get started
 
@@ -35,10 +35,17 @@ python3 -m pip install -e .
 ```
 
 The Python distribution is named `hexa-pipelines`; imports use `hexa`.
+The JavaScript binding uses ES2022 modules without runtime dependencies.
+From a checkout, run `bun run example` or
+`node examples/mortgage-people/run.js`; import its public API from
+`hexa/shapes.js`, `hexa/combinators.js` and `hexa/runtime.js`.
+
 To test or prepare a release from a checkout, install `uv` and run:
 
 ```sh
 make test
+make test-js       # JavaScript tests; requires Bun.
+make test-all      # Both bindings.
 make test-release  # Build the source distribution and wheel.
 make release       # Test, build, and publish to PyPI.
 ```
@@ -145,4 +152,4 @@ deferral, explained in
   skill.
 - [examples/](examples/README.md): the mortgage-people pipeline in both
   bindings; run it with
-  `python3 examples/mortgage-people/people_extract.py`.
+   `python3 examples/mortgage-people/people_extract.py` or `bun run example`.

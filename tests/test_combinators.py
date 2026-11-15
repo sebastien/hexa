@@ -6,7 +6,7 @@ import unittest
 
 from hexa.combinators import (
 	Policy, admit, always, bound, choose, collect, each, fold, lift,
-	otherwise, pipe, project, recover, stage, stages, tap, when,
+	guard, otherwise, pipe, project, recover, stage, stages, tap, when,
 )
 from hexa.runtime import Checks, Ledger, Runtime, report, run
 from hexa.shapes import Failure, Gap, Int, Text, Tuple, codes, decode, either, encode, slots, tolerant
@@ -34,6 +34,35 @@ def Missing(env, value):
 
 class CombinatorTests(unittest.IsolatedAsyncioTestCase):
 	"""Assert on members and structured fields rather than message text."""
+
+	async def test_stage_decorator_preserves_name_and_contracts(self):
+		import hexa.stage
+		self.assertIs(hexa.stage.stage, stage)
+		@stage("PyNamedDecorator", input=Tuple(Int), output=Int)
+		def PyNamedDecorator(env, value):
+			return (yield value)
+		self.assertEqual(PyNamedDecorator.name, "PyNamedDecorator")
+		self.assertEqual(encode(PyNamedDecorator), "$PyNamedDecorator")
+		self.assertIs(decode("$PyNamedDecorator"), PyNamedDecorator)
+		self.assertEqual(await run({}, PyNamedDecorator, 1), 1)
+		with self.assertRaises(Failure) as caught:
+			await run({}, PyNamedDecorator, "bad")
+		self.assertIs(caught.exception.kind, Failure.Contract)
+		with self.assertRaises(Failure) as caught:
+			stage("PyRenamedDecorator")(PyNamedDecorator)
+		self.assertIs(caught.exception.code, Runtime.StageRenamed)
+		with self.assertRaises(Failure) as caught:
+			stage("PyDifferentGenerator")(Missing)
+		self.assertIs(caught.exception.code, Runtime.StageRenamed)
+
+	async def test_guard_inferred_output_limits_substitutes(self):
+		fixed = guard(Int, TestReason.Missing)
+		self.assertEqual(await run({}, fixed, 1), 1)
+		self.assertEqual(await run({}, recover(pipe(Missing, fixed), Policy.Substitute(1)), "bad"), 1)
+		with self.assertRaises(Failure) as caught:
+			await run({}, recover(pipe(Missing, fixed), Policy.Substitute("bad")), "bad")
+		self.assertIs(caught.exception.kind, Failure.Defect)
+		self.assertEqual(await run({}, recover(pipe(Missing, guard(lambda env: Int, TestReason.Missing)), Policy.Substitute("dynamic")), "bad"), "dynamic")
 
 	async def test_naming(self):
 		class Pipeline(stages):
@@ -78,6 +107,9 @@ class CombinatorTests(unittest.IsolatedAsyncioTestCase):
 		self.assertIs(caught.exception.code, Runtime.NameRedeclared)
 
 	async def test_policies(self):
+		with self.assertRaises(Failure) as caught:
+			codes("Policy", "Shadow")
+		self.assertIs(caught.exception.code, Runtime.NameRedeclared)
 		self.assertEqual(await run({}, recover(Missing, Policy.Substitute(42)), 1), 42)
 		self.assertEqual(await run({}, recover(Missing, Policy.Fallback(lift(lambda value: value + 1))), 1), 2)
 		self.assertEqual(await run({}, each(Missing, Policy.Drop), [1, 2]), [])

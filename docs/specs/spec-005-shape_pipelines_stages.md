@@ -156,6 +156,8 @@ Response ← yield env.RequestSend({method: GET, path: p"/mortgages/{root.mortga
   call: `yield env.RequestSend(...)`.
 - Effect arguments and results are JSON data, so effects can be journaled, replayed,
   compared in tests and serialised.
+  Constructing an effect snapshots and freezes its arguments; later caller
+  mutations cannot change it. Each host attempt receives detached JSON data.
 - `p` builds a request path from a template: each interpolated value becomes exactly
   one percent-encoded segment, so `p"/mortgages/{Id}"` cannot address another
   resource. A value other than `Text` or `Int`, or one that is empty, `.` or `..`, is

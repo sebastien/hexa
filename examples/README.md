@@ -3,8 +3,8 @@
 Programs following
 [spec-002](../docs/specs/spec-002-shape_pipelines_javascript.md) (JavaScript) and
 [spec-003](../docs/specs/spec-003-shape_pipelines_python.md) (Python). The Python
-example imports the implemented `hexa` package and runs on Python 3.14+.
-JavaScript remains a syntax-only example until its binding exists.
+example imports the `hexa` package and runs on Python 3.14+. The JavaScript
+example runs on Node or Bun using the package's ES module entry points.
 
 From the repository root, install the Python package in editable mode with
 `python3 -m pip install -e .`, then run `python3 -m unittest tests.test_conformance -v` to
@@ -13,6 +13,9 @@ encodings. The shared JSON fixtures are unchanged.
 
 Run `python3 examples/mortgage-people/people_extract.py` to print the fixture-backed
 pipeline result (person records and ledger) as JSON.
+Run `node examples/mortgage-people/run.js` or `bun run example` for the
+JavaScript version. Run `make test-js` to check the JavaScript binding against
+the same fixtures, including replay and shape encodings.
 
 ## Mortgage people
 

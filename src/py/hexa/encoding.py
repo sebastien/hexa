@@ -174,7 +174,9 @@ def decode(value: object, profile: ProfileDefinition | None = None, *, registry:
 
 	def visitReference(item):
 		result = resolve(item["$"])
-		if isinstance(result, Constructor) and ("value" in item or "stage" in item):
+		if "value" in item or "stage" in item:
+			if not isinstance(result, Constructor) or len(item) != 2:
+				raise Failure(Failure.Contract, Issue.Mismatch)
 			return result(item["value"]) if "value" in item else result(resolve(item["stage"]))
 		if "arguments" in item:
 			if not isinstance(result, CodecFamily):
@@ -196,7 +198,7 @@ def decode(value: object, profile: ProfileDefinition | None = None, *, registry:
 			return result
 		if "map" not in definition:
 			raise Failure(Failure.Contract, Runtime.MemberUnknown)
-		return codec(name, source=visit(definition["source"]), canonical=visit(definition["canonical"]), map=definition["map"], gaps=definition.get("gaps", {}))
+		return codec(name, source=visit(definition["source"]), canonical=visit(definition["canonical"]), map=definition["map"], gaps=definition.get("gaps", {}), examples=definition.get("examples", ()))
 
 	def visitProfile(item):
 		definition = item["$profile"]

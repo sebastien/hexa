@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import math
+import re
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
+from decimal import Decimal
 from types import MappingProxyType
 
 # -----------------------------------------------------------------------------
@@ -20,6 +23,8 @@ ABSENT = object()
 MAX_INT = 2**53 - 1
 FAILURE_KINDS = ("Contract", "Budget", "Cancel", "Defect", "Shape", "Gap", "Effect")
 LIMITS = {"maxDepth": 100, "maxNodes": 100000, "maxBytes": 10000000}
+NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*")
+RESERVED_MEMBERS = frozenset(("name", "members", "unknown", "then", "toJSON", "constructor", "prototype", "__proto__"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +63,7 @@ class Namespace:
 	__slots__ = ("name", "members", "unknown")
 
 	def __init__(self, name, members, unknown=None):
+		validateMemberNames(members)
 		object.__setattr__(self, "name", name)
 		object.__setattr__(self, "members", MappingProxyType(dict(members)))
 		object.__setattr__(self, "unknown", unknown)
@@ -130,8 +136,17 @@ def constructor(name, factory):
 	return MEMBERS[name]
 
 
+def validateMemberNames(names):
+	"""Reject namespace names hidden by either binding's metadata or native protocols."""
+	for name in names:
+		if name in RESERVED_MEMBERS:
+			raise ValueError(f"reserved namespace member: {name}")
+
+
 def namespace(name, names):
 	"""Build an unregistered namespace of interned members `name.item` for each of `names`."""
+	names = tuple(names)
+	validateMemberNames(names)
 	return Namespace(name, {item: member(f"{name}.{item}") for item in names})
 
 
@@ -182,11 +197,44 @@ class Gap(Failure):
 		super().__init__(Failure.Gap, code, path, location)
 
 
+for name, value in (("Failure", Failure), ("Issue", Issue), ("Runtime", Runtime), ("Ledger", Ledger), ("Coverage", Coverage), ("Checks", Checks), ("Profile", Profile)):
+	register(name, value)
+
+
 # -----------------------------------------------------------------------------
 #
 # UTILITIES
 #
 # -----------------------------------------------------------------------------
+
+def codeNamespace(name, names):
+	"""Build an unregistered namespace of interned codes under `name`."""
+	names = tuple(names)
+	if not NAME_RE.fullmatch(name) or any(not NAME_RE.fullmatch(item) or "." in item for item in names):
+		raise ValueError("invalid code name")
+	validateMemberNames(names)
+	return Namespace(name, {item: member(f"{name}.{item}") for item in names})
+
+
+def reasonNamed(reasons, name):
+	"""Resolve a declared codec, transform or request reason by its short name."""
+	if not name.startswith("_"):
+		for item in reasons:
+			if item.short == name:
+				return item
+	raise unknownMember(name, Runtime.MemberUnknown)
+
+
+def entityName(value):
+	"""Return the canonical identity of a named program entity."""
+	if isinstance(value, str):
+		return value
+	if isinstance(value, Namespace):
+		return value.name
+	if getattr(value, "name", None):
+		return value.name
+	raise TypeError("expected a named program entity")
+
 
 def jsonEqual(left, right):
 	if isinstance(left, bool) or isinstance(right, bool):
@@ -210,6 +258,30 @@ def normalise(value):
 	if isinstance(value, dict):
 		return {str(key) if type(key) is int else key: normalise(item) for key, item in value.items()}
 	return value
+
+
+def jsonLiteral(value):
+	"""Spell JSON literals for identities using JavaScript number and property notation."""
+	if type(value) in (int, float):
+		number = Decimal(str(value))
+		if not number:
+			return "0"
+		if Decimal("0.000001") <= abs(number) < Decimal("1e21"):
+			text = format(number, "f")
+			return text.rstrip("0").rstrip(".") if "." in text else text
+		coefficient, exponent = format(number, "e").split("e")
+		if "." in coefficient:
+			coefficient = coefficient.rstrip("0").rstrip(".")
+		exponent = int(exponent)
+		return coefficient + "e" + ("+" if exponent >= 0 else "-") + str(abs(exponent))
+	if isinstance(value, (list, tuple)):
+		return "[" + ",".join(jsonLiteral(item) for item in value) + "]"
+	if isinstance(value, dict):
+		# JavaScript enumerates array-index property names before other object keys.
+		keys = sorted(value, key=lambda key: (0, int(key)) if len(key) <= 10 and key.isascii() and key.isdecimal()
+			and str(int(key)) == key and int(key) < 2**32 - 1 else (1, 0))
+		return "{" + ",".join(json.dumps(key, ensure_ascii=False) + ":" + jsonLiteral(value[key]) for key in keys) + "}"
+	return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def pointer(path):
@@ -283,18 +355,6 @@ def validateData(value, *, maxDepth=LIMITS["maxDepth"], maxNodes=LIMITS["maxNode
 	visit(value, 0)
 
 
-def backoff(milliseconds, *, factor=2, max=5000):
-	"""Build a capped exponential delay in milliseconds."""
-	if milliseconds < 0 or factor < 1 or max < 0:
-		raise ValueError("invalid backoff parameters")
-	def delay(attempt):
-		return min(max, milliseconds * factor ** (attempt - 1))
-	return delay
-
-
-DEFAULT_DELAY = backoff(250)
-
-
 def retryable(failure):
 	"""Tell whether `failure` is a transient effect failure that may be attempted again."""
 	return failure.kind is Failure.Effect and failure.transient and not failure.exhausted and not failure.fatal
@@ -323,5 +383,23 @@ def failureFromData(data):
 		if key in data:
 			setattr(failure, key, deepcopy(data[key]))
 	return failure
+
+
+# -----------------------------------------------------------------------------
+#
+# HIGH-LEVEL API
+#
+# -----------------------------------------------------------------------------
+
+def backoff(milliseconds, *, factor=2, max=5000):
+	"""Build a capped exponential delay in milliseconds."""
+	if any(type(value) not in (int, float) or not math.isfinite(value) for value in (milliseconds, factor, max)) or milliseconds < 0 or factor < 1 or max < 0:
+		raise ValueError("invalid backoff parameters")
+	def delay(attempt):
+		return min(max, milliseconds * factor ** (attempt - 1))
+	return delay
+
+
+DEFAULT_DELAY = backoff(250)
 
 # EOF

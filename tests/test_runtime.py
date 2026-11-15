@@ -7,7 +7,7 @@ import unittest
 
 from hexa.combinators import Policy, always, backoff, collect, lift, parallel, recover, retry, stages
 from hexa.runtime import Ledger, Runtime, fork, inert, join, ledger, p, race, report, run
-from hexa.shapes import Failure, Gap, codes
+from hexa.shapes import Failure, Gap, codes, encode
 
 # -----------------------------------------------------------------------------
 #
@@ -25,6 +25,37 @@ TestReason = codes("RuntimeTest", "Missing", "Transient")
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 	"""Check runtime behavior independently of pipeline business logic."""
+
+	async def test_effect_arguments_are_deeply_snapshotted_and_immutable(self):
+		from hexa.instructions import Effect
+		arguments = [{"items": [1.0], "literal": "$Text"}]
+		instruction = Effect("Publish", arguments)
+		arguments[0]["items"].append(2)
+		with self.assertRaises(TypeError):
+			instruction.arguments[0]["items"] = []
+		with self.assertRaises(AttributeError):
+			instruction.arguments[0]["items"].append(3)
+		expected = {"operation": "Publish", "arguments": [{"items": [1], "literal": "$Text"}]}
+		self.assertEqual(instruction.encoded(), expected)
+		self.assertEqual(instruction, inert({}).Publish({"items": [1], "literal": "$Text"}))
+		self.assertEqual(encode(instruction), expected)
+		detached = instruction.encoded()
+		detached["arguments"][0]["items"].append(9)
+		def Publish(env):
+			return (yield instruction)
+		def publish(value, context):
+			value["items"].append(4)
+			return value
+		self.assertEqual(await run({"Publish": publish}, Publish), {"items": [1, 4], "literal": "$Text"})
+		self.assertEqual(instruction.encoded(), expected)
+		def Recorded(env):
+			yield from Publish(env)
+			raise Gap(TestReason.Missing)
+		with self.assertRaises(Failure) as caught:
+			await run({"Publish": publish, "record": True}, Recorded)
+		journal = caught.exception.journal
+		self.assertEqual(journal[0]["arguments"], expected["arguments"])
+		self.assertEqual(await run({"replay": journal}, Publish), {"items": [1, 4], "literal": "$Text"})
 
 	async def test_plain_yields_and_native_awaitables(self):
 		def Plain(env):
@@ -556,6 +587,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 	def test_paths(self):
 		identifier = "a/b ?#%"
 		self.assertEqual(p(t"/items/{identifier}"), "/items/a%2Fb%20%3F%23%25")
+		identifier = "!'()*-._~"
+		self.assertEqual(p(t"/items/{identifier}"), "/items/%21%27%28%29%2A-._~")
 		for identifier in ("", ".", "..", True, None, [], 2**53):
 			with self.assertRaises(Failure) as caught:
 				p(t"/items/{identifier}")

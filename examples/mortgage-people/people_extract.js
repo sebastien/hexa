@@ -1,10 +1,8 @@
-// PeopleExtract: MortgageRetrieve → MortgageValidate → MortgageClientsSelect → MortgageClientsProject
-//
-// Targets the proposed binding (spec-002); not runnable until shapes.js,
-// combinators.js and runtime.js exist.
-import { Any, Text, Int, DateTime, DateOnly, Positive, Null, loose, either, refine, slots, codes, optional, via, codec, Location } from "./shapes.js";
-import { stages, pipe, guard, select, each, project, collect, Policy } from "./combinators.js";
-import { join, p } from "./runtime.js";
+/** Module: people_extract — Project mortgage clients into person records. */
+
+import { Any, Text, Int, DateTime, DateOnly, Positive, Null, loose, either, refine, slots, codes, optional, via, codec, Location } from "hexa/shapes.js";
+import { stages, pipe, guard, select, each, project, collect, Policy } from "hexa/combinators.js";
+import { join, p } from "hexa/runtime.js";
 
 // Host vocabulary, inlined for the example.
 const CountryCode = either("AU", "GB", "NZ");
@@ -48,3 +46,5 @@ export const peopleExtractEnvironment = responses => ({
 	RequestSend: request => responses[request.path],
 });
 // await run(peopleExtractEnvironment(responses), People.PeopleExtract)  deep-equals  fixtures/expected.json
+
+// EOF

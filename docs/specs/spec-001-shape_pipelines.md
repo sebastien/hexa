@@ -128,6 +128,8 @@ representation.
   codecs, transforms, constraints and named stages. Redeclaring a name with an equal
   value returns the existing one; a different value is the `Failure.Defect`
   `Runtime.NameRedeclared`. Unnamed helper stages are never registered.
+  Library namespace roots are registered too: an application cannot redeclare
+  `Issue`, `Runtime`, `Policy` or another library namespace.
 - Errors follow the same split. A mistake in program code (wrong arguments, a
   malformed shape, selector or pattern) is reported where it is declared, as the
   language's own argument error (`TypeError` or `ValueError` in Python, `TypeError` in
@@ -155,6 +157,12 @@ Mortgage = codes {RootMismatch}
 
 - `codes(Namespace, ...Names)` declares program codes. Members are interned by
   qualified name, like slots; an unknown member is an error when it is referenced.
+- Namespace members cannot be named `name`, `members`, `unknown`, `then`, `toJSON`,
+  `constructor`, `prototype` or `__proto__`. Both bindings reject these names at
+  declaration time, before registering members, because they collide with namespace
+  metadata or native protocols. The rule is case-sensitive (`Name` is allowed)
+  and applies to slot and stage namespaces and declared codec, transform and
+  request reasons too. It adds no restrictions to local pattern capture names.
 - `Issue`, `Profile` and `Runtime` are the library's code namespaces. A codec is the
   namespace of its own codes: `CountryName.Unmapped`, `CountryName.Unformattable` and the
   reasons its `gaps` declare. `InstantOffset.Discarded` is a loss reason.

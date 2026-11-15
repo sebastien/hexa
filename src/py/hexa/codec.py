@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .core import Gap, freeze, register
-from .shape import Codec, CodecFamily, codeNamespace, compileShape, errors
+from .core import Gap, codeNamespace, freeze, register
+from .shape import Codec, CodecFamily, compileShape, errors
 
 # -----------------------------------------------------------------------------
 #

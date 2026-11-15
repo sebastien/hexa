@@ -21,6 +21,12 @@ without it.
 | `combinators.js` | Combinators (including `validate` and `plan`), `Policy`, `backoff` |
 | `runtime.js` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
 
+`shapes.js` is a façade over `shape` (algebra and matching), `template`, `codec`,
+`selector`, `encoding`, `profile`, `selection_request` (the concrete selection
+format) and `vocabulary`. `combinators` and `runtime` build on `stage` and
+`instructions`; shared declaration identity and reason helpers live in `core`.
+Programs import only the three public modules.
+
 Import canonical names unchanged; never rename on import.
 
 ## Shapes
@@ -128,15 +134,16 @@ project(DividendRow, DividendRecord, { outer: [Instrument.Isin], holes: Policy.A
 ```
 
 - Enum members and codes are interned symbols, `Symbol.for("member:Failure.Gap")`,
-  exposed on frozen namespaces. Their `description` holds the qualified name; the
-  runtime and `encode` derive data names from it.
+  exposed on frozen namespaces. Their `description` includes the `member:` prefix;
+  the runtime and `encode` strip that prefix to derive canonical data names.
 - Namespaces behave like slot namespaces: an unknown member throws
   `Runtime.MemberUnknown`, and `then`, `toJSON` and `constructor` return `undefined`.
 - `Failure` is both the error class and the kind enum: `Failure.Gap` is a static
   member. `Policy.Substitute(value)` and `Policy.Fallback(S)` return frozen policy
   values; the other `Policy` members are symbols.
-- Symbols are not JSON. A stage that needs a member's data name uses
-  `member.description`; it never compares data strings against string literals.
+- Symbols are not JSON. A stage that needs a member's data name strips the
+  `member:` prefix from `member.description`; it never compares data strings
+  against string literals.
 
 ## Stages and effects
 
@@ -173,7 +180,8 @@ function* MortgageDealsRetrieve(env, Id) {
 - Hand-written stages are `function*` declarations or generator methods; stages in a
   pipeline diagram are declared in a stage namespace (below).
 - `p` is a template tag. Each interpolation is checked as a `Text` or `Int` segment
-  and encoded with `encodeURIComponent`, so `/` inside a value never splits it.
+  and percent-encoded as RFC 3986 path segments (including `!'()*`), so `/` inside
+  a value never splits it. Literal template text is unchanged.
 - The runtime passes a frozen stand-in as `env`. Data properties (`root`, `policy`,
   `vocabulary`, `scope`) are frozen values; operation properties return effect
   descriptions. Calling a stand-in operation outside a yield does nothing.
@@ -226,8 +234,9 @@ const { value, ledger } = await run(env, People.PeopleExtract);
 - Operations receive the effect's arguments followed by a context
   `{ signal, attempt, strand }`, and return a value or a promise. They must honour
   `signal`.
-- `EnvironmentCreate` freezes and snapshots its input; per-run options are overlaid
-  with `{ ...env, signal, record: true }`.
+- `EnvironmentCreate` in this example is a host-defined helper, not a library
+  export. `run` and `inert` snapshot and freeze stage-facing authority; per-run
+  options may be overlaid with `{ ...env, signal, record: true }`.
 
 ## Failures and cancellation
 
@@ -235,7 +244,7 @@ const { value, ledger } = await run(env, People.PeopleExtract);
 export class Failure extends Error {
 	static Contract = member("Failure.Contract");   // … Budget, Cancel, Defect, Shape, Gap, Effect
 	constructor(kind, code, { path, location } = {}) {
-		super(code.description);
+		super(code.description.replace(/^member:/, ""));
 		this.name = "Failure";
 		Object.assign(this, { kind, code, ...(path ? { path } : {}), ...(location ? { location } : {}) });
 	}
@@ -272,7 +281,7 @@ async function drive(it, strand) {
 			let value, failed = false;
 			try {
 				if (isThenable(yielded)) throw new Failure(Failure.Defect, Runtime.NativeAwaitable);
-				const result = strand.perform(yielded);   // effect and instruction records act; other values pass through
+				const result = strand.perform(yielded);   // synchronous unless an effect or concurrent instruction awaits
 				value = isThenable(result) ? await result : result;
 			} catch (error) { value = strand.classify(error); failed = true; }
 			if (failed && value.kind === Failure.Cancel) throw value;   // closed below, never thrown in
@@ -291,7 +300,8 @@ export async function run(env, stage, ...inputs) {
 }
 ```
 
-Instructions and plain values resolve synchronously; only performed effects await.
+Immediate instructions and plain values resolve synchronously; performed effects
+and concurrent instructions await.
 `join` and `race` use `Promise.allSettled` / `Promise.race` over child strands, each
 with an `AbortController` derived from the strand's signal. Effect descriptions and
 instructions are instances of record classes (`Effect`, `Report`, `LedgerRead`,

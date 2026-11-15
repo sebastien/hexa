@@ -28,7 +28,7 @@ Gather      = gather(Slot) | gather(Via)
 
 | Form | Matches |
 | --- | --- |
-| `Any` | Every value |
+| `Any` | Every JSON data value |
 | `Text` | Strings |
 | `Num` | Finite numbers |
 | `Int` | Integers within ±2⁵³−1 |
@@ -277,6 +277,8 @@ PayableRow = {payableDate: $Dividend.PayableDate via DatePattern("YYYYMMDD"), ..
 - An instance's name is its call, `DatePattern("YYYYMMDD")`; its codes stay those of
   the codec, `DatePattern.Invalid`. Encodings write
   `{"$": "Dividend.PayableDate", "via": {"$": "DatePattern", "arguments": ["YYYYMMDD"]}}`.
+  Literal arguments use the same JSON notation in both bindings: `1.0` is named
+  `1`, negative zero is named `0`, and exponent notation uses the same thresholds.
 - Parameters supply literals only, as for parameterised shapes. A host chooses
   arguments (for instance from a learned format) when it builds the shape, never
   during a match.

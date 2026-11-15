@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from .core import ABSENT, Failure, Gap, Issue, freeze, register
-from .shape import Shape, asCaptures, capture, checkOutput, children, codeNamespace, compatible, compileShape, errors, isCollectionSlot, mergeCaptures, reasonNamed, rest
+from .core import ABSENT, Failure, Gap, Issue, codeNamespace, freeze, reasonNamed, register
+from .shape import Shape, asCaptures, capture, checkOutput, children, compatible, compileShape, errors, isCollectionSlot, mergeCaptures, rest
 
 # -----------------------------------------------------------------------------
 #
@@ -184,7 +184,8 @@ def outputShape(template):
 
 def transform(name, function, *, inputs, output, gaps=(), examples=()):
 	"""Register a pure derivation with checked input and output shapes."""
-	reasons = codeNamespace(name, gaps)
+	if not callable(function):
+		raise TypeError("transforms require a callable")
 	parameters = []
 	for index, item in enumerate(inputs):
 		if isinstance(item, list) and len(item) == 2 and item[1] is Ellipsis:
@@ -193,6 +194,9 @@ def transform(name, function, *, inputs, output, gaps=(), examples=()):
 			parameters.append(rest(item[0]))
 		else:
 			parameters.append(compileShape(item))
+	if any(item.kind == "rest" and index != len(parameters) - 1 for index, item in enumerate(parameters)):
+		raise TypeError("variadic parameter must be last")
+	reasons = codeNamespace(name, gaps)
 	result = Transform(name, function, tuple(parameters), compileShape(output), tuple(reasons.members.values()), tuple(freeze(item) for item in examples))
 	return register(name, result)
 
