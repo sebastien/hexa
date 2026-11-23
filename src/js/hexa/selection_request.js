@@ -101,6 +101,10 @@ function selectionCompile(options, value, catalog) {
 		for (const id of entitySet.requires ?? []) add(id);
 		selection.attributes.forEach((attribute, index) => {
 			const entry = entitySet.attributes[attribute], path = ["selections", alias, "attributes", index];
+			for (const [i, link] of (entry.via ?? []).entries()) {
+				if (!Object.hasOwn(relationTypes, link)) throw new Failure(Failure.Defect, Issue.Missing);
+				if (!supply(relationTypes[link], [...path, "via", i])) return;
+			}
 			if (supply(entry, path) && entry.reference != null && !selected.has(entry.reference)) gaps.push({ code: SelectionRequest.ReferenceUnselected, path });
 		});
 	}

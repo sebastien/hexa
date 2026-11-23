@@ -88,4 +88,17 @@ test("generic profiles do not register the concrete selection format", () => {
 	expect(result.exitCode).toBe(0);
 });
 
+test("implicit catalog paths stop at the first missing link", () => {
+	const entry = supplier => ({ correspondences: [{ resolved: true, supplier }] });
+	const catalog = { steps: { Root: {}, Leaf: {} }, relations: { Group: entry("Root"), Member: {} },
+		entitySets: { People: { type: "Person", attributes: { Name: { ...entry("Leaf"), via: ["Group", "Member"] } } } } };
+	const options = { ...OPTIONS, entitySets: { People: ["Name"] }, relations: [] };
+	const request = SelectionRequest.validate(options, { version: 1, selections: { P: { from: "People", attributes: ["Name"] } } }, catalog);
+	const compiled = SelectionRequest.compile(options, request, catalog);
+	expect(compiled.steps).toEqual([{ step: "Root" }]);
+	expect(compiled.gaps).toEqual([{ code: SelectionRequest.Unmapped, path: ["selections", "P", "attributes", 0, "via", 1] }]);
+	catalog.relations.Member = entry("Root");
+	expect(SelectionRequest.compile(options, request, catalog).steps).toEqual([{ step: "Root" }, { step: "Leaf" }]);
+});
+
 // EOF

@@ -695,6 +695,14 @@ The catalog, `env.vocabulary.SelectionRequest`, is host data:
 
 - `steps` is ordered: its order is the plan's step order. Adding a step adds the
   steps it `requires`, transitively.
+- A catalog attribute may carry `via: ["Link", ...]`, an ordered list of
+  catalog relation entries needed to reach that attribute's population.
+  Selecting the attribute implicitly plans their suppliers. At the first
+  unsupplied link, the gap's path extends the requested attribute path with
+  `["via", index]`; later links and the leaf are not scheduled for that
+  selection. Shared steps still run once. The caller cannot override `via`;
+  an unknown catalog link is a host defect. Materialization checks concrete
+  instance joins; this planning step establishes only potential suppliers.
 - A correspondence is resolved when it has been reviewed and implemented. Its
   `supplier` is admitted when it names a catalog step. Every admitted supplier of a
   resolved correspondence is added.

@@ -69,5 +69,17 @@ assert REGISTRY["SelectionRequest"] is selection.SelectionRequest
 """], capture_output=True, text=True)
 		self.assertEqual(result.returncode, 0, result.stderr)
 
+	def test_implicit_catalog_path_stops_at_first_missing_link(self):
+		entry = lambda step: {"correspondences": [{"resolved": True, "supplier": step}]}
+		catalog = {"steps": {"Root": {}, "Leaf": {}}, "relations": {"Group": entry("Root"), "Member": {}},
+			"entitySets": {"People": {"type": "Person", "attributes": {"Name": {**entry("Leaf"), "via": ["Group", "Member"]}}}}}
+		options = {**OPTIONS, "entitySets": {"People": ["Name"]}, "relations": []}
+		request = SelectionRequest.validate(options, {"version": 1, "selections": {"P": {"from": "People", "attributes": ["Name"]}}}, catalog)
+		compiled = SelectionRequest.compile(options, request, catalog)
+		self.assertEqual(compiled["steps"], [{"step": "Root"}])
+		self.assertEqual(compiled["gaps"], [{"code": SelectionRequest.Unmapped, "path": ["selections", "P", "attributes", 0, "via", 1]}])
+		catalog["relations"]["Member"] = entry("Root")
+		self.assertEqual(SelectionRequest.compile(options, request, catalog)["steps"], [{"step": "Root"}, {"step": "Leaf"}])
+
 
 # EOF

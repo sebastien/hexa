@@ -163,7 +163,15 @@ def selectionCompile(options, value, catalog):
 			add(identifier)
 		for index, attribute in enumerate(selection["attributes"]):
 			entry, path = entitySet["attributes"][attribute], ["selections", alias, "attributes", index]
-			if supply(entry, path) and entry.get("reference") is not None and entry["reference"] not in selected:
+			# Trusted catalog paths are ordered proof obligations, not steps supplied by the caller.
+			for i, link in enumerate(entry.get("via", [])):
+				if link not in relationTypes:
+					raise Failure(Failure.Defect, Issue.Missing)
+				if not supply(relationTypes[link], [*path, "via", i]):
+					break
+			else:
+				if not supply(entry, path) or entry.get("reference") is None or entry["reference"] in selected:
+					continue
 				gaps.append({"code": SelectionRequest.ReferenceUnselected, "path": path})
 	for index, relation in enumerate(value["relations"]):
 		supply(relationTypes[relation["type"]], ["relations", index])

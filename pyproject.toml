@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hexa-pipelines"
-version = "0.2.0"
+version = "0.2.1"
 description = "Shape-directed pipelines with inert effects and replay"
 requires-python = ">=3.14"
 dependencies = []
