@@ -147,7 +147,8 @@ representation.
 | `Coverage` | `Supplied`, `SourceNull`, `NotSupplied`, `Unmapped`, `Conflicting` |
 | `Checks` | `Boundary`, `Off` |
 | `Profile` | `Exceeded`, `Forbidden` |
-| `Runtime` | `CloseYielded`, `MemberUnknown`, `NameRedeclared`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict` |
+| `Runtime` | `CloseYielded`, `MemberUnknown`, `NameRedeclared`, `NativeAwaitable`, `PathSegmentInvalid`, `ReplayMismatch`, `SlotRedeclared`, `SlotUnknown`, `StageRenamed`, `StrandUnjoined`, `StrandConflict`, `RecordFailed` |
+| `Request` | `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Gone`, `Rejected`, `TooManyRequests`, `ServerError`, `Unavailable`, `Timeout`, `Network`, `Unreadable`; declared by the `http` module when imported (spec-005, HTTP requests) |
 
 ### Codes
 

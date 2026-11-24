@@ -151,7 +151,11 @@ class Run {
 		this.snapshot = environmentSnapshot(environment);
 		this.policy = this.snapshot.policy;
 		this.operations = new Map(Object.entries(environment).filter(([key, value]) => /^[A-Z]/.test(key) && typeof value === "function"));
+		if (environment.record != null && !["boolean", "function"].includes(typeof environment.record)) throw new TypeError("record must be a boolean or a function");
 		this.record = Boolean(environment.record);
+		this.sink = typeof environment.record === "function" ? environment.record : null;
+		this.sinkFailed = false;
+		this.sinkError = undefined;
 		this.replay = replayIndex(environment.replay);
 		this.usedReplay = new Set();
 		this.journal = [];
@@ -170,7 +174,13 @@ class Run {
 	}
 
 	appendJournal(entry) {
-		if (this.record) this.journal.push({ ...clone(entry), index: this.journal.length });
+		if (!this.record) return;
+		const item = { ...clone(entry), index: this.journal.length };
+		this.journal.push(item);
+		if (!this.sink) return;
+		// A failing sink must not replace the outcome in flight: it is dropped and fails the run at its end.
+		try { this.sink(clone(item)); }
+		catch (error) { this.sink = null; this.sinkFailed = true; this.sinkError = error; }
 	}
 
 	validate(value) { validateData(value, this.policy); }
@@ -316,7 +326,7 @@ class Strand {
 		} catch (error) {
 			const failure = this.classify(error);
 			if (failure.kind === Failure.Cancel) entry.cancelled = true;
-			else entry.failure = failureData(failure);
+			else entry.failure = failureData(failure, { detail: true });
 			throw failure;
 		} finally { this.run.appendJournal(entry); }
 	}
@@ -504,6 +514,7 @@ export async function run(environment, stage, ...inputs) {
 		checkSignal(strand.controller.signal);
 		const value = await strand.drive(asStage(stage), inputs);
 		if (state.replay && state.usedReplay.size !== state.replay.size) throw new Failure(Failure.Defect, Runtime.ReplayMismatch);
+		if (state.sinkFailed) throw new Failure(Failure.Defect, Runtime.RecordFailed, { cause: state.sinkError });
 		return value;
 	} catch (error) {
 		const failure = error instanceof Failure ? error : new Failure(Failure.Defect, Issue.Mismatch, { cause: error });

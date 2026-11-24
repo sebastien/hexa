@@ -23,12 +23,20 @@ const UNARY = { $tolerant: tolerant, $gather: gather, $parsed: parsed, $rest: re
 //
 // -----------------------------------------------------------------------------
 
+/** Escape a `$`-prefixed key or string as verbatim, `$$`. */
 function escapeKey(value) { return value.startsWith("$") ? "$" + value : value; }
+/** A struct key, `?` marking an optional one. A `$` key is escaped verbatim and a verbatim key is never optional. */
+function encodeKey(key, optional) {
+	if (optional && key.startsWith("$")) throw new TypeError("an optional key cannot start with '$'");
+	return escapeKey(key) + (optional ? "?" : "");
+}
+/** A plain mapping's key, a trailing `?` marking an optional one, as `encodeKey` spells it. */
+function encodeMappingKey(key) { return key.endsWith("?") ? encodeKey(key.slice(0, -1), true) : encodeKey(key, false); }
 function short(value) { return memberName(value).split(".").at(-1); }
-function codecReference(value) { return value.family ? { $: value.family.name, arguments: clone(value.arguments) } : value.name; }
+function encodeCodecReference(value) { return value.family ? { $: value.family.name, arguments: clone(value.arguments) } : value.name; }
 
 function encodeCodec(value) {
-	if (value.family) return codecReference(value);
+	if (value.family) return encodeCodecReference(value);
 	const definition = { name: value.name, source: encode(value.source), canonical: encode(value.canonical) };
 	if (value.table !== null) Object.assign(definition, { map: clone(value.table), gaps: clone(value.gapTable ?? {}) });
 	else Object.assign(definition, { gaps: value.gaps.map(short), losses: value.losses.map(short) });
@@ -55,9 +63,9 @@ function encodeShape(value) {
 	if (["literal", "slot"].includes(kind)) return encode(args[0]);
 	if (kind === "parsed") return { $parsed: encode(args[0]) };
 	if (kind === "optional") return { $: args[0].name, optional: true };
-	if (kind === "via") return { $: args[0].name, via: codecReference(args[1]) };
+	if (kind === "via") return { $: args[0].name, via: encodeCodecReference(args[1]) };
 	if (["struct", "loose"].includes(kind)) {
-		const result = Object.fromEntries(args.map(([key, optional, child]) => [escapeKey(key) + (optional ? "?" : ""), encode(child)]));
+		const result = Object.fromEntries(args.map(([key, optional, child]) => [encodeKey(key, optional), encode(child)]));
 		return kind === "loose" ? { $loose: result } : result;
 	}
 	if (kind === "list") return [encode(args[0].kind === "gather" ? args[0].args[0] : args[0])];
@@ -100,7 +108,7 @@ export function encode(value) {
 	if (Array.isArray(value)) return value.map(encode);
 	if (isPlain(value)) {
 		if (Object.keys(value).length === 2 && Object.hasOwn(value, "operation") && Object.hasOwn(value, "arguments")) { validateData(value); return clone(value); }
-		return Object.fromEntries(Object.entries(value).map(([key, child]) => [escapeKey(key), encode(child)]));
+		return Object.fromEntries(Object.entries(value).map(([key, child]) => [encodeMappingKey(key), encode(child)]));
 	}
 	if (value === null || typeof value === "boolean" || typeof value === "number") { validateData(value); return value; }
 	throw new TypeError("configuration cannot be encoded");

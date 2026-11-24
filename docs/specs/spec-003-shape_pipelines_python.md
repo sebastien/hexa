@@ -19,12 +19,18 @@ as domain languages, may load it lazily and stay usable without it.
 | `shapes.py` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `profile`, `request`, `describe`, `SelectionRequest`, `Failure`, `Gap`, `Issue`, `Profile` |
 | `combinators.py` | Combinators (including `validate` and `plan`), `Policy`, `backoff` |
 | `runtime.py` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
+| `http.py` | `http` (the `RequestSend` operation over `urllib`, or a host `transport`), `Request` |
 
 `shapes.py` is a façade over the internal modules `shape` (algebra and matching),
 `template`, `codec`, `selector`, `encoding`, `profile`, `selection_request` (the
 concrete selection format) and `vocabulary`; `combinators.py` and `runtime.py`
 build on `stage` and `instructions`. Shared declaration identity and reason
-helpers live in `core`. Programs import only the three public modules.
+helpers live in `core`. Programs import only the three public modules; hosts
+also import `hexa.http` for HTTP APIs (spec-005, HTTP requests). In Python the
+base URL is positional and the rest keywords: `http(base=None, *, apis=None,
+headers=None, transport=None, timeout=None)`. A `transport(method, url, headers,
+body, timeout)` takes the body as bytes and `timeout` in seconds, returns
+`(status, reason, headers, body bytes)`, and is plain (run in a thread) or `async`.
 
 Import canonical names unchanged; never rename on import. Configure linters to
 allow PascalCase functions and camelCase arguments in pipeline modules (e.g. ruff

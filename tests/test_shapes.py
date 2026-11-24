@@ -218,6 +218,11 @@ class ShapeTests(unittest.TestCase):
 				self.assertEqual(encode(decode(encode(value))), encode(value))
 		self.assertEqual(encode(__), {"$rest": "$Any"})
 		self.assertEqual(expand(decode({"$$literal?": "$$Text"}), {})[0], {"$literal?": "$Text"})
+		# A verbatim key is never optional: an optional `$` key has no encoding that decodes back to it.
+		self.assertEqual(encode(loose({"$id": TestSlots.Id})), {"$loose": {"$$id": "$ShapeTestSlots.Id"}})
+		for unencodable in (loose({"$id?": TestSlots.Id}), {"$id?": "$x"}):
+			with self.assertRaises(TypeError):
+				encode(unencodable)
 		with self.assertRaises(Failure):
 			decode("$Unknown")
 		with self.assertRaises(Failure):

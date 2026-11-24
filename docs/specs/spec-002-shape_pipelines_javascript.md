@@ -20,12 +20,20 @@ without it.
 | `shapes.js` | Types, shape constructors (including `tolerant` and `gather`), slots, `Location`, `Origin`, codecs, `transform`, `lossy` and `codes`, standard vocabulary, operations (including `evidence` and `parsed`), `encode`, `decode`, `profile`, `request`, `describe`, `SelectionRequest`, `Failure`, `Gap`, `Issue`, `Profile` |
 | `combinators.js` | Combinators (including `validate` and `plan`), `Policy`, `backoff` |
 | `runtime.js` | `run`, `report`, `ledger`, `join`, `race`, `fork`, `inert`, `p`, `Ledger`, `Coverage`, `Checks`, `Runtime` |
+| `http.js` | `http` (the `RequestSend` operation over `fetch`), `Request` |
 
 `shapes.js` is a façade over `shape` (algebra and matching), `template`, `codec`,
 `selector`, `encoding`, `profile`, `selection_request` (the concrete selection
 format) and `vocabulary`. `combinators` and `runtime` build on `stage` and
 `instructions`; shared declaration identity and reason helpers live in `core`.
-Programs import only the three public modules.
+Programs import only the three public modules; hosts also import `hexa/http.js`
+for HTTP APIs (spec-005, HTTP requests). Integrations that decode
+configuration compiled elsewhere may also import `hexa/core.js` (`REGISTRY`),
+`hexa/shape.js` (`Slot`, `compileShape`, `validateShape`, captures) and
+`hexa/template.js` (`Transform`), as the Python integrations import `hexa.core`
+and `hexa.shape`. They use these to keep slots and transforms out of the
+process-wide registry: a `decode` registry layered over `REGISTRY`, and
+unregistered `Slot` and `Transform` values.
 
 Import canonical names unchanged; never rename on import.
 
@@ -236,7 +244,8 @@ const { value, ledger } = await run(env, People.PeopleExtract);
   `signal`.
 - `EnvironmentCreate` in this example is a host-defined helper, not a library
   export. `run` and `inert` snapshot and freeze stage-facing authority; per-run
-  options may be overlaid with `{ ...env, signal, record: true }`.
+  options may be overlaid with `{ ...env, signal, record: true }`; `record` may
+  also be a function receiving each journal entry (spec-005).
 
 ## Failures and cancellation
 

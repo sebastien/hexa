@@ -7,6 +7,7 @@ import { expect, test } from "bun:test";
 import * as Shapes from "hexa/shapes.js";
 import * as Combinators from "hexa/combinators.js";
 import * as Runtime from "hexa/runtime.js";
+import * as Http from "hexa/http.js";
 import { REGISTRY } from "../../src/js/hexa/core.js";
 import { captureState } from "../../src/js/hexa/shape.js";
 
@@ -14,7 +15,7 @@ const fixture = JSON.parse(readFileSync(new URL("../fixtures/structure-parity.js
 const { Any, Failure, Int, Issue, Text, capture, codec, codes, either, errors, evidence, gather, lossy, pattern, slot, via, where } = Shapes;
 
 test("public module exports match the shared binding contract", () => {
-	for (const [name, module] of Object.entries({ shapes: Shapes, combinators: Combinators, runtime: Runtime })) {
+	for (const [name, module] of Object.entries({ shapes: Shapes, combinators: Combinators, runtime: Runtime, http: Http })) {
 		expect(Object.keys(module).sort()).toEqual(fixture.exports[name].toSorted());
 	}
 });

@@ -346,6 +346,17 @@ it fails with a transient `Failure.Effect`, waiting `delay(attempt)` through
   journal emission: effect completion or race selection/cancellation. It is
   informational only, never a replay matching or winner-selection key. A journal
   is a JSON array and valid `env.replay` input; replay never calls host operations.
+- `env.record` is `true` or a function. A function receives each entry, detached,
+  as it is journaled, so the host keeps the journal of a successful run too, or
+  streams it to an audit log while the run continues. It should not fail: if it
+  does, the runtime stops calling it and the run, once otherwise successful,
+  fails with the `Failure.Defect` `Runtime.RecordFailed`, whose cause is the
+  function's error. An absent or null `record` is `false`.
+- A journaled `failure` is the failure's public data plus `detail`, the message
+  of the host error that caused it (a failed request's status and the start of
+  its body, say), when there is one. Replay restores `detail` as the failure's
+  cause. The details of a failed effect are thus never in public failure fields,
+  yet the host can read them from the journal.
 - A failed run raises its failure with the ledger and, when recording, the journal
   attached privately. Journals contain source data: they are host-private evidence,
   never disclosed to callers by default.
@@ -439,7 +450,7 @@ reaches the loser, so effect results alone do not identify the selected one.
 ## Environment
 
 The environment carries `root`, `scope`, `vocabulary`, `policy`, operations, and
-per-run options `signal`, `replay` and `record`.
+per-run options `signal`, `replay` and `record` (`true` or a journal sink).
 
 - The runtime accepts a host-provided mapping, validates and snapshots authority,
   vocabulary and policy, and exposes a frozen stand-in. A host factory
@@ -456,6 +467,44 @@ per-run options `signal`, `replay` and `record`.
 - The vocabulary registers types, constraints, derivations, transforms and codecs by
   name, each pure and with a declared signature and, for codecs and derivations,
   examples (spec-004). It is what `CatalogDescribe` presents to callers.
+
+### HTTP requests
+
+Most effects are requests to HTTP APIs, so the library provides a host operation
+for them: `http({base, apis?, headers?, fetch | transport?, timeout?})` returns
+`{RequestSend}` to put in the environment.
+
+```text
+{status, data} ← yield env.RequestSend({method: GET, path: p"/clients/{Id}", api?, query?, headers?, body?})
+```
+
+- `path` starts with `/` and is appended to the API's `base` URL; `api` selects
+  one of the named `apis` instead. `query` values are scalars or lists of them;
+  `body` is sent as JSON. `headers` add to the host's (an `authorization`
+  header, say); a host whose credentials expire passes its own `fetch`
+  (JavaScript) or `transport` (Python) instead. A malformed request is a
+  `Failure.Contract`. A null `api` is the default one.
+- The result is the status and `data`: the parsed JSON body, the text of a
+  non-JSON body, or `null` when the body is empty.
+- An error status or a failed exchange is a `Failure.Effect` with a `Request`
+  code: `BadRequest` (400), `Unauthorized` (401), `Forbidden` (403), `NotFound`
+  (404), `Conflict` (409), `Gone` (410), `TooManyRequests` (429), `Unavailable`
+  (503), `Timeout` (408, 504 or no answer within `timeout` milliseconds),
+  `ServerError` (other 5xx), `Rejected` (other 4xx), `Network` and `Unreadable`
+  (a JSON body that does not parse). A `Failure` raised by the host `fetch` or
+  `transport` passes through; any other error it raises is `Network`, or
+  `Timeout` for a timeout. 408, 425, 429, 502, 503, 504, `Timeout`
+  and `Network` are transient, so the retry policy retries them. The failure's
+  cause holds the method, URL, status and the start of the body: the journal
+  `detail`.
+- `Request` is declared when the `http` module is imported, so a program cannot
+  declare its own `Request` codes alongside it, and replaying a journal with
+  `Request` failures requires the module imported, else replay is
+  `Runtime.ReplayMismatch`.
+- `timeout` holds whatever the transport does. Cancelling the run aborts the
+  request in flight; in Python, a plain (threaded) transport such as the
+  default `urllib` one cannot be interrupted, so its thread runs on, at most
+  until `timeout`, while the run proceeds.
 
 ## Accumulators
 

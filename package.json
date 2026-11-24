@@ -6,7 +6,11 @@
 	"exports": {
 		"./shapes.js": "./src/js/hexa/shapes.js",
 		"./combinators.js": "./src/js/hexa/combinators.js",
-		"./runtime.js": "./src/js/hexa/runtime.js"
+		"./runtime.js": "./src/js/hexa/runtime.js",
+		"./core.js": "./src/js/hexa/core.js",
+		"./shape.js": "./src/js/hexa/shape.js",
+		"./template.js": "./src/js/hexa/template.js",
+		"./http.js": "./src/js/hexa/http.js"
 	},
 	"files": ["src/js/hexa"],
 	"scripts": {

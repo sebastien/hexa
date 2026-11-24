@@ -458,7 +458,9 @@ inspectable.
   `{"$pattern": "{Name}-{Client.Id:IntegerText}"}`. References resolve through the
   registry; decoding never evaluates code or imports arbitrary names.
 - `$$` prefixes a verbatim literal: `"$$Text"` is the string `$Text`, and the key
-  `"$$ref"` is the literal key `$ref`. A verbatim key is never optional.
+  `"$$ref"` is the literal key `$ref`. A verbatim key is never optional, so an
+  optional key cannot begin with `$`: `encode` refuses it rather than write a
+  verbatim key that decodes as a different, required one.
 - Other strings, numbers, booleans and `null` are literals; a key ending in `?` is
   optional; a one-item array is a list shape.
 - Constraints, derivations, transforms and codecs appear only as registered names.

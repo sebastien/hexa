@@ -151,7 +151,7 @@ def namespace(name, names):
 
 
 Issue = namespace("Issue", "Mismatch Missing Unexpected Constraint CaptureConflict".split())
-Runtime = namespace("Runtime", "CloseYielded MemberUnknown NameRedeclared NativeAwaitable PathSegmentInvalid ReplayMismatch SlotRedeclared SlotUnknown StageRenamed StrandUnjoined StrandConflict".split())
+Runtime = namespace("Runtime", "CloseYielded MemberUnknown NameRedeclared NativeAwaitable PathSegmentInvalid ReplayMismatch SlotRedeclared SlotUnknown StageRenamed StrandUnjoined StrandConflict RecordFailed".split())
 Ledger = namespace("Ledger", "Gap Loss".split())
 Coverage = namespace("Coverage", "Supplied SourceNull NotSupplied Unmapped Conflicting".split())
 Checks = namespace("Checks", "Boundary Off".split())
@@ -360,8 +360,8 @@ def retryable(failure):
 	return failure.kind is Failure.Effect and failure.transient and not failure.exhausted and not failure.fatal
 
 
-def failureData(failure):
-	"""Serialise `failure` as value-free journal data."""
+def failureData(failure, *, detail=False):
+	"""Serialise `failure` as value-free data; with `detail`, add the message of its host cause, for the journal only."""
 	result = {"kind": failure.kind.short, "code": str(failure.code)}
 	for key in ("path", "location", "trace"):
 		value = getattr(failure, key)
@@ -370,6 +370,9 @@ def failureData(failure):
 	for key in ("fatal", "exhausted", "transient"):
 		if getattr(failure, key):
 			result[key] = True
+	cause = failure.__cause__
+	if detail and cause is not None:
+		result["detail"] = str(cause) or type(cause).__name__
 	return result
 
 
@@ -382,6 +385,8 @@ def failureFromData(data):
 	for key in ("transient", "fatal", "exhausted", "trace"):
 		if key in data:
 			setattr(failure, key, deepcopy(data[key]))
+	if isinstance(data.get("detail"), str):
+		failure.__cause__ = Exception(data["detail"])
 	return failure
 
 

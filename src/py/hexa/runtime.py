@@ -172,7 +172,12 @@ class Run:
 	def __init__(self, environment):
 		self.env, self.operations = environmentSnapshot(environment)
 		self.policy = self.env.policy
-		self.record = bool(environment.get("record"))
+		record = environment.get("record")
+		if record is not None and not isinstance(record, bool) and not callable(record):
+			raise TypeError("record must be a boolean or a callable")
+		self.record = bool(record)
+		self.sink = record if callable(record) else None
+		self.sinkError = None
 		self.hostSignal = environment.get("signal")
 		if self.hostSignal is not None and not isinstance(self.hostSignal, asyncio.Event):
 			raise TypeError("signal must be an asyncio.Event")
@@ -202,8 +207,14 @@ class Run:
 	def appendJournal(self, entry):
 		"""Append an effect completion or race decision without changing effect positions."""
 		if self.record:
-			entry["index"] = len(self.journal)
-			self.journal.append(entry)
+			item = {**deepcopy(entry), "index": len(self.journal)}
+			self.journal.append(item)
+			if self.sink is not None:
+				try:
+					self.sink(deepcopy(item))
+				except Exception as error:
+					# A failing sink must not replace the outcome in flight: it is dropped and fails the run at its end.
+					self.sink, self.sinkError = None, error
 
 	def raceDecision(self, strand, keys):
 		"""Allocate a race ordinal and validate its recorded participant keys on replay."""
@@ -402,7 +413,7 @@ class Strand:
 			entry["cancelled"] = True
 			raise
 		except Failure as failure:
-			entry["failure"] = failureData(failure)
+			entry["failure"] = failureData(failure, detail=True)
 			raise
 		finally:
 			self.run.appendJournal(entry)
@@ -631,6 +642,8 @@ async def run(env: Mapping, stage: object, *inputs: object) -> object:
 			result = await task if task is not None else await execute()
 			if state.replay is not None and state.usedReplay != state.replay.keys():
 				raise Failure(Failure.Defect, Runtime.ReplayMismatch)
+			if state.sinkError is not None:
+				raise Failure(Failure.Defect, Runtime.RecordFailed) from state.sinkError
 			return result
 		except asyncio.CancelledError as caught:
 			failure = Failure(Failure.Cancel, Issue.Mismatch)

@@ -158,6 +158,9 @@ test("patterns and enclosing selector captures", () => {
 test("encoding round trips and malformed configurations", () => {
 	for (const value of [Tuple(Int, __, Text), refine(Int, Positive), loose({ id: Fields.Id }), tolerant(Fields.Name), parsed(Fields.Name), pattern("{Name}"), either(Text, Int), via(Fields.Date, DatePattern("YYYYMMDD"))]) expect(encode(decode(encode(value)))).toEqual(encode(value));
 	expect(expand(decode({ "$$literal?": "$$Text" }), {})[0]).toEqual({ "$literal?": "$Text" });
+	// A verbatim key is never optional: an optional `$` key has no encoding that decodes back to it.
+	expect(encode(loose({ $id: Fields.Id }))).toEqual({ $loose: { $$id: "$JsShape.Id" } });
+	for (const unencodable of [loose({ "$id?": Fields.Id }), { "$id?": "$x" }]) expect(() => encode(unencodable)).toThrow("an optional key cannot start with '$'");
 	for (const malformed of ["$Unknown", { $loose: "$Text" }, { $refine: "$Int", constraints: ["$Text"] }, { $unknown: 1 }, { $: "Text", arguments: [1] }]) expect(() => decode(malformed)).toThrow(Error);
 	expect(() => decode({ $rest: "$Any", unexpected: 1 })).toThrow("Issue.Unexpected");
 	expect(() => decode("$Text", null, { registry: new Map() })).toThrow("Runtime.MemberUnknown");

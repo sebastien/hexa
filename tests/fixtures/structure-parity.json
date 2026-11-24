@@ -18,7 +18,8 @@
 		"runtime": [
 			"Checks", "Coverage", "Ledger", "Runtime", "fork", "inert", "join", "ledger",
 			"p", "race", "report", "run"
-		]
+		],
+		"http": ["Request", "http"]
 	},
 	"captureNames": ["evidence", "failed", "losses", "gathered", "copy", "replace", "constructor", "name", "members", "unknown", "then", "toJSON", "prototype"],
 	"reservedNamespaceMembers": ["name", "members", "unknown", "then", "toJSON", "constructor", "prototype", "__proto__"],

@@ -30,7 +30,20 @@ UNARY_OPERATORS = {"$pattern": pattern, "$tolerant": tolerant, "$gather": gather
 # -----------------------------------------------------------------------------
 
 def escapeKey(key):
+	"""Escape a `$`-prefixed key or string as verbatim, `$$`."""
 	return "$" + key if key.startswith("$") else key
+
+
+def encodeKey(key, optional):
+	"""A struct key, `?` marking an optional one. A `$` key is escaped verbatim and a verbatim key is never optional."""
+	if optional and key.startswith("$"):
+		raise TypeError("an optional key cannot start with '$'")
+	return escapeKey(key) + ("?" if optional else "")
+
+
+def encodeMappingKey(key):
+	"""A plain mapping's key, a trailing `?` marking an optional one, as `encodeKey` spells it."""
+	return encodeKey(key[:-1], True) if key.endswith("?") else encodeKey(key, False)
 
 
 def encodeCodecReference(value):
@@ -85,7 +98,7 @@ def encodeShape(value):
 	if kind == "via":
 		return {"$": args[0].name, "via": encodeCodecReference(args[1])}
 	if kind in ("struct", "loose"):
-		result = {escapeKey(key) + ("?" if isOptional else ""): encode(child) for key, isOptional, child in args}
+		result = {encodeKey(key, isOptional): encode(child) for key, isOptional, child in args}
 		return {"$loose": result} if kind == "loose" else result
 	if kind == "list":
 		return [encode(args[0].args[0] if args[0].kind == "gather" else args[0])]
@@ -127,7 +140,7 @@ def encode(value: object) -> object:
 		if set(value) == {"operation", "arguments"}:
 			validateData(value)
 			return deepcopy(value)
-		return {escapeKey(key): encode(item) for key, item in value.items()}
+		return {encodeMappingKey(key): encode(item) for key, item in value.items()}
 	if isinstance(value, (list, tuple)):
 		return [encode(item) for item in value]
 	if value is None or type(value) in (int, float, bool):

@@ -108,6 +108,8 @@ its data through effects, with fixtures and a recorded journal, see
   `parallel`, `always` and more, building stages from shapes and policies.
 - *Effects as data*: stages yield `{operation, arguments}` and the runtime
   performs them, so a run can be journaled, replayed, or tested with `inert`.
+- *HTTP APIs*: `http(...)` provides `RequestSend` for JSON APIs, with coded,
+  retryable failures whose details stay in the journal.
 - *Ledger*: gaps and losses are reported per row with their reason and
   location, and summarised as coverage.
 - *Profiles and requests*: callers send shapes as JSON, checked against what
@@ -147,9 +149,11 @@ deferral, explained in
   [spec-001](docs/specs/spec-001-shape_pipelines.md) for concepts and naming,
   then spec-004 (shapes) and spec-005 (stages); spec-002 and spec-003 cover
   the JavaScript and Python bindings.
-- [docs/skills/shape-pipelines/](docs/skills/shape-pipelines/SKILL.md):
-  working rules for writing programs in this style, also usable as an agent
-  skill.
+- [docs/skills/](docs/skills/): working rules, also usable as agent skills:
+  [hexa-shapes](docs/skills/hexa-shapes/SKILL.md) for defining data shapes,
+  slots, codecs and templates, and
+  [hexa-pipelines](docs/skills/hexa-pipelines/SKILL.md) for writing stages
+  and pipelines.
 - [examples/](examples/README.md): the mortgage-people pipeline in both
   bindings; run it with
    `python3 examples/mortgage-people/people_extract.py` or `bun run example`.

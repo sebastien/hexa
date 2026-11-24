@@ -48,7 +48,7 @@ Object.freeze(Failure);
 Object.freeze(Gap);
 
 export const Issue = namespace("Issue", "Mismatch Missing Unexpected Constraint CaptureConflict".split(" "));
-export const Runtime = namespace("Runtime", "CloseYielded MemberUnknown NameRedeclared NativeAwaitable PathSegmentInvalid ReplayMismatch SlotRedeclared SlotUnknown StageRenamed StrandUnjoined StrandConflict".split(" "));
+export const Runtime = namespace("Runtime", "CloseYielded MemberUnknown NameRedeclared NativeAwaitable PathSegmentInvalid ReplayMismatch SlotRedeclared SlotUnknown StageRenamed StrandUnjoined StrandConflict RecordFailed".split(" "));
 export const Ledger = namespace("Ledger", ["Gap", "Loss"]);
 export const Coverage = namespace("Coverage", "Supplied SourceNull NotSupplied Unmapped Conflicting".split(" "));
 export const Checks = namespace("Checks", ["Boundary", "Off"]);
@@ -221,10 +221,13 @@ export function entityName(value) {
 	return NAMESPACES.get(value)?.name ?? value.name;
 }
 
-export function failureData(failure) {
+/** A failure as data. Value-free unless `detail`: then the message of its host cause, for the journal only. */
+export function failureData(failure, { detail = false } = {}) {
 	const result = { kind: memberName(failure.kind).split(".").at(-1), code: memberName(failure.code) };
 	for (const key of ["path", "location", "trace"]) if (failure[key] !== undefined) result[key] = clone(failure[key]);
 	for (const key of ["fatal", "exhausted", "transient"]) if (failure[key]) result[key] = true;
+	const cause = failure.cause;
+	if (detail && cause !== undefined && cause !== null) result.detail = cause instanceof Error ? cause.message || cause.name : String(cause);
 	return result;
 }
 
@@ -232,6 +235,7 @@ export function failureFromData(data) {
 	if (!Object.hasOwn(Failure, data.kind) || !isMember(REGISTRY.get(data.code))) throw new Failure(Failure.Defect, Runtime.ReplayMismatch);
 	const result = new Failure(Failure[data.kind], REGISTRY.get(data.code), data);
 	for (const key of ["trace", "fatal", "exhausted", "transient"]) if (Object.hasOwn(data, key)) result[key] = clone(data[key]);
+	if (typeof data.detail === "string") result.cause = new Error(data.detail);
 	return result;
 }
 
