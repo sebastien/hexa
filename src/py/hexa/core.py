@@ -34,7 +34,7 @@ class Member:
 	name: str
 
 	@property
-	def short(self):
+	def short(self) -> str:
 		"""Return the member name without its namespace."""
 		return self.name.rsplit(".", 1)[-1]
 
@@ -122,7 +122,8 @@ def register(name, value):
 	raise Failure(Failure.Defect, Runtime.NameRedeclared)
 
 
-def member(name):
+def member(name: str) -> Member:
+	"""Return the interned member with `name`, registering it if needed."""
 	if name not in MEMBERS:
 		MEMBERS[name] = register(name, Member(name))
 	return MEMBERS[name]
@@ -236,7 +237,8 @@ def entityName(value):
 	raise TypeError("expected a named program entity")
 
 
-def jsonEqual(left, right):
+def jsonEqual(left, right) -> bool:
+	"""Compare JSON values without treating booleans as numbers."""
 	if isinstance(left, bool) or isinstance(right, bool):
 		return type(left) is type(right) and left == right
 	if isinstance(left, (int, float)) and isinstance(right, (int, float)):
@@ -251,6 +253,7 @@ def jsonEqual(left, right):
 
 
 def normalise(value):
+	"""Normalise integral floats and integer map keys recursively in JSON data."""
 	if isinstance(value, float) and math.isfinite(value) and value.is_integer():
 		return int(value)
 	if isinstance(value, list):
@@ -295,6 +298,7 @@ def unescapeSegment(segment):
 
 
 def freeze(value):
+	"""Recursively freeze mappings and sequences for safe sharing."""
 	if isinstance(value, Mapping):
 		return MappingProxyType({key: freeze(item) for key, item in value.items()})
 	if isinstance(value, (list, tuple)):
@@ -303,6 +307,7 @@ def freeze(value):
 
 
 def thaw(value):
+	"""Restore frozen mappings and tuples to mutable JSON containers."""
 	if isinstance(value, Mapping):
 		return {key: thaw(item) for key, item in value.items()}
 	if isinstance(value, tuple):

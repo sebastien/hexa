@@ -5,17 +5,11 @@ import { Codec, check, compileShape, errors } from "./shape.js";
 
 // -----------------------------------------------------------------------------
 //
-// UTILITIES
-//
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-//
 // HIGH-LEVEL API
 //
 // -----------------------------------------------------------------------------
 
-/** Declare a reversible table or pure-code conversion. */
+/** Declare a reversible table or pure-code conversion, optionally parameterized. */
 export function codec(name, { source, canonical, parse, format, map, gaps = map ? {} : [], losses = [], params, examples = [] }) {
 	if (!NAME_RE.test(name)) throw new TypeError("invalid codec name");
 	source = compileShape(source);
@@ -44,6 +38,7 @@ export function codec(name, { source, canonical, parse, format, map, gaps = map 
 			return reverse.get(value);
 		};
 		format = (value, original) => {
+			// Preserve the original spelling when it maps to the same canonical value.
 			if (reverse.has(original) && reverse.get(original) === value) return original;
 			if (!forward.has(value)) throw new Gap(reasons.Unformattable);
 			return forward.get(value);
@@ -53,6 +48,7 @@ export function codec(name, { source, canonical, parse, format, map, gaps = map 
 	const definition = { name, source, canonical, parse, format, codecFamily: false, gaps: gapNames.map(key => reasons[key]), losses: losses.map(key => reasons[key]), examples: freeze(clone(examples)), arguments: [], family: null, table: map === undefined ? null : freeze(clone(map)), gapTable: map === undefined ? null : freeze(clone(gaps)) };
 	if (params && Object.keys(params).length) {
 		const parameters = Object.entries(params).map(([key, value]) => [key, compileShape(value)]);
+		// Identical serialized arguments share a registered codec instance.
 		const instances = new Map();
 		const family = (...args) => {
 			if (args.length !== parameters.length) throw new TypeError("wrong codec arity");

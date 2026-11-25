@@ -90,6 +90,8 @@ class stages(metaclass=StagesMeta):
 
 @dataclass(frozen=True, slots=True)
 class Branch:
+	"""A compiled routing shape and its stage; `None` is the catch-all shape."""
+
 	shape: object
 	stage: Stage
 
@@ -106,6 +108,7 @@ def isOccurrence(value):
 
 
 def reportTarget(env, explicit=None):
+	"""Resolve an explicit report target or the nearest named enclosing stage."""
 	if explicit is not None:
 		if not isinstance(explicit, (Stage, Namespace, Slot)):
 			raise TypeError("target must be a program entity")
@@ -118,6 +121,7 @@ def reportTarget(env, explicit=None):
 
 
 def validateOptions(options):
+	"""Reject unknown policy options and undeclared failure kinds."""
 	if options.keys() - {"on", "target", "reason"}:
 		raise TypeError("unknown policy option")
 	if "on" in options and any(kind not in FAILURE_MEMBERS for kind in options["on"]):

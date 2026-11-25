@@ -1,4 +1,4 @@
-"""Module: hexa.selection_request — Selection request validation and planning."""
+"""Module: hexa.selectionrequest — Selection request validation and planning."""
 
 from __future__ import annotations
 
@@ -26,12 +26,14 @@ ALIAS_RE = re.compile(r"[A-Z][A-Za-z0-9]{0,63}")
 # -----------------------------------------------------------------------------
 
 def contractFailure(issues):
+	"""Raise a contract failure containing all validation `issues`."""
 	failure = Failure(Failure.Contract, issues[0]["code"], issues[0]["path"])
 	failure.issues = issues
 	raise failure
 
 
 def selectionOptionsValid(value):
+	"""Check that `value` maps entity-set names to lists of attribute names."""
 	return isinstance(value, dict) and all(isinstance(items, list) and all(type(item) is str for item in items) for items in value.values())
 
 

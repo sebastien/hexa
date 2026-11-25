@@ -31,14 +31,15 @@ class Stage:
 	def __set_name__(self, owner, name):
 		self.bind(name)
 
-	def bind(self, name):
+	def bind(self, name: str) -> None:
 		"""Name this stage once and register it under `name`."""
 		if self.name is not None and self.name != name:
 			raise Failure(Failure.Defect, Runtime.StageRenamed)
 		object.__setattr__(self, "name", name)
 		register(name, self)
 
-	def encoded(self):
+	def encoded(self) -> str:
+		"""Encode a registered stage by name."""
 		if not self.name or REGISTRY.get(self.name) != self:
 			raise TypeError("stages must be named to encode")
 		return "$" + self.name
@@ -85,7 +86,7 @@ class Stage:
 #
 # -----------------------------------------------------------------------------
 
-def asStage(value):
+def asStage(value) -> Stage:
 	"""Return `value` as a stage; a generator function keeps its name but is not registered."""
 	if isinstance(value, Stage):
 		return value

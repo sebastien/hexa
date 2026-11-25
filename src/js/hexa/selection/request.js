@@ -1,8 +1,8 @@
-/** Module: hexa.selection_request — Selection request validation and planning. */
+/** Module: hexa.selection.request — Selection request validation and planning. */
 
-import { Failure, Issue, Profile, isPlain } from "./core.js";
-import { request } from "./profile.js";
-import { Int, Struct, Text, refine, where } from "./shape.js";
+import { Failure, Issue, Profile, isPlain } from "../core.js";
+import { request } from "../profile.js";
+import { Int, Struct, Text, refine, where } from "../shape.js";
 
 // -----------------------------------------------------------------------------
 //
@@ -109,6 +109,7 @@ function selectionCompile(options, value, catalog) {
 		});
 	}
 	value.relations.forEach((relation, index) => supply(relationTypes[relation.type], ["relations", index]));
+	// The catalog defines plan order, even when dependencies are discovered later.
 	const ordered = Object.keys(steps).filter(key => needed.has(key));
 	return { steps: ordered.map(step => ({ step })), allow: [...new Set(ordered.filter(key => steps[key].capability).map(key => steps[key].capability))], gaps };
 }

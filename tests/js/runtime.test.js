@@ -102,6 +102,24 @@ test("effects snapshot and freeze nested arguments", async () => {
 	expect(effect.arguments).toEqual([{ items: [1] }]);
 });
 
+test("join and race validate original containers before copying", async () => {
+	class Items { get value() { throw new Error("must not read"); } }
+	for (const make of [join, race]) {
+		for (const value of [undefined, null, 1, "text", true, () => {}, new Date(), new Map(), new Items()]) {
+			expect(() => make(value)).toThrow("join/race requires list or struct");
+		}
+		for (const value of [[1], { value: 1 }, Object.assign(Object.create(null), { value: 1 })]) {
+			const instruction = make(value);
+			expect(instruction.items).not.toBe(value);
+			expect(instruction.items).toEqual(value);
+		}
+	}
+	function* Join() { return yield join(Object.assign(Object.create(null), { value: 1 })); }
+	function* Race() { return yield race([1]); }
+	expect(await run({}, Join)).toEqual({ value: 1 });
+	expect(await run({}, Race)).toBe(1);
+});
+
 test("repeated joins have per-strand effect sequence numbers", async () => {
 	function* Twice(env) { yield join([env.Read(1)]); return yield join([env.Read(2)]); }
 	const failure = await failed(run({ record: true, Read: value => value }, recorded(Twice)));

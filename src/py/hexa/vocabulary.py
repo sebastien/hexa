@@ -29,7 +29,8 @@ DECIMAL_SOURCE_RE = re.compile(r"([+-]?)([0-9]+)(?:\.([0-9]*))?(?:[eE]([+-]?[0-9
 #
 # -----------------------------------------------------------------------------
 
-def decimalParse(value):
+def decimalParse(value: str | int | float) -> str:
+	"""Normalize decimal text or a bounded number to canonical decimal text."""
 	if type(value) in (int, float):
 		if abs(value) > MAX_INT:
 			raise Gap(DecimalText.Invalid)
@@ -56,7 +57,8 @@ def decimalParse(value):
 	return ("-" if sign == "-" else "") + result
 
 
-def instantParse(value):
+def instantParse(value: str):
+	"""Normalize a zoned date-time to UTC, recording discarded offsets."""
 	components = dateParts(value)
 	year, month, day = map(int, components["date"].split("-"))
 	timeText = components["time"]
@@ -88,14 +90,16 @@ def instantParse(value):
 	return lossy(result, InstantOffset.Discarded) if zone != "Z" else result
 
 
-def datePatternRegex(patternText):
+def datePatternRegex(patternText: str) -> re.Pattern[str]:
+	"""Compile a pattern containing exactly one each of YYYY, MM and DD."""
 	tokens = re.split(r"(YYYY|MM|DD)", patternText)
 	if sorted(token for token in tokens if token in ("YYYY", "MM", "DD")) != ["DD", "MM", "YYYY"]:
 		raise Gap(DatePattern.Invalid)
 	return re.compile("".join(f"(?P<{token}>[0-9]{{{4 if token == 'YYYY' else 2}}})" if token in ("YYYY", "MM", "DD") else re.escape(token) for token in tokens))
 
 
-def datePatternParse(patternText, value):
+def datePatternParse(patternText: str, value: str) -> str:
+	"""Parse `value` with `patternText` into a validated date."""
 	found = datePatternRegex(patternText).fullmatch(value)
 	if not found:
 		raise Gap(DatePattern.Invalid)
@@ -105,12 +109,14 @@ def datePatternParse(patternText, value):
 	return result
 
 
-def datePatternFormat(patternText, value, original=None):
+def datePatternFormat(patternText: str, value: str, original: str | None = None) -> str:
+	"""Format a canonical date using `patternText`; ignore `original`."""
 	datePatternRegex(patternText)
 	return patternText.replace("YYYY", value[:4]).replace("MM", value[5:7]).replace("DD", value[8:10])
 
 
-def identityFormat(value, original=None):
+def identityFormat(value: object, original: object = None) -> object:
+	"""Return `value` unchanged, ignoring `original`."""
 	return value
 
 

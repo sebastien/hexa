@@ -9,6 +9,7 @@ import { Captures, Shape, Slot, capture, captureKey, captureState, checkOutput, 
 //
 // -----------------------------------------------------------------------------
 
+/** Declared transform and its input, output and gap contracts. */
 export class Transform {
 	constructor(definition) {
 		Object.assign(this, definition);
@@ -21,6 +22,7 @@ export class Transform {
 //
 // -----------------------------------------------------------------------------
 
+/** Compile template data; arrays are tuples except for a collection slot. */
 export function compileTemplate(value) {
 	if (value instanceof Shape || value instanceof Slot) return compileShape(value);
 	if (Array.isArray(value)) {
@@ -49,6 +51,7 @@ export function parameterShapes(parameters, count) {
 	return [...parameters.slice(0, index), ...Array(count - parameters.length + 1).fill(parameters[index].args[0]), ...parameters.slice(index + 1)];
 }
 
+/** Expand a compiled template, collecting missing or unformattable positions in `holes`. */
 export function expandTemplate(shape, captures, holes, path = [], quiet = false) {
 	const { kind, args } = shape;
 	if (["struct", "loose"].includes(kind)) {
@@ -71,6 +74,7 @@ export function expandTemplate(shape, captures, holes, path = [], quiet = false)
 				try { result[index] = item.args[1].convert(value, { formatting: true, original: entry?.codec?.[index] === item.args[1].name ? entry.raw[index] : undefined }); }
 				catch (error) { if (!(error instanceof Gap)) throw error; holes.push({ path: [...path, index], reason: error.code }); }
 			});
+			// Represent holes as absent object keys rather than sparse array elements.
 			return Object.keys(result).length === result.length ? result : Object.fromEntries(Object.entries(result));
 		}
 		result.length = args.length;

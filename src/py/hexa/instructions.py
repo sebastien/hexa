@@ -23,10 +23,10 @@ __all__ = ["report", "ledger", "join", "race", "fork"]
 
 @dataclass(frozen=True, slots=True)
 class Effect:
-	"""An inert host operation call with JSON arguments."""
+	"""An inert host call: `arguments` must be a list and is stored as a frozen tuple."""
 
 	operation: str
-	arguments: tuple
+	arguments: list | tuple
 
 	def __post_init__(self):
 		validateData(self.arguments, allowIndexMaps=True)

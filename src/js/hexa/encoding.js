@@ -114,7 +114,10 @@ export function encode(value) {
 	throw new TypeError("configuration cannot be encoded");
 }
 
-/** Resolve bounded configuration, checking all profile permissions first. */
+/** Resolve bounded configuration, checking all profile permissions first.
+ * `registry` resolves existing declarations; newly decoded codecs and profiles
+ * are still registered by their declaration functions in the global registry.
+ */
 export function decode(value, profile = null, { registry = REGISTRY, ...limits } = {}) {
 	if (profile !== null) {
 		if (!(profile instanceof ProfileDefinition)) throw new TypeError("expected profile");

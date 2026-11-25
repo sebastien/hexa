@@ -28,7 +28,7 @@ Client = slots("Client",
 	BirthDate=either(DateTime & DateOnly, Null), Country=CountryCode)
 Mortgage = codes("Mortgage", "RootMismatch")
 
-def RootBound(root):
+def rootBound(root):
 	"""Bind the response's authority to `root`."""
 	return loose({"application": loose({"id": root["mortgage"]}), "clients": [Any]})
 
@@ -56,7 +56,7 @@ class People(stages):
 		})
 		return {"application": responses["Application"]["data"], "clients": responses["Clients"]["data"]}
 
-	MortgageValidate = guard(lambda env: RootBound(env.root), Mortgage.RootMismatch)
+	MortgageValidate = guard(lambda env: rootBound(env.root), Mortgage.RootMismatch)
 	MortgageClientsSelect = select("clients/*")
 	MortgageClientsProject = each(project(ClientRow, PersonRecord), Policy.Drop)
 	PeopleExtract = collect(pipe(MortgageRetrieve, MortgageValidate,

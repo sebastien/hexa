@@ -38,7 +38,7 @@ DEFAULT_POLICY = {"contracts": Checks.Boundary, "maxGaps": 1000, "maxConcurrency
 class Environment:
 	"""Frozen stage-facing authority plus inert operation constructors.
 
-	`strand` is the runtime's handle on the executing strand; stages never use it.
+	`strand` is the runtime's handle on the executing strand, also used by combinators.
 	"""
 
 	root: object
@@ -598,7 +598,7 @@ class Strand:
 # -----------------------------------------------------------------------------
 
 def inert(env: Mapping) -> Environment:
-	"""Return a frozen environment whose operations only describe effects."""
+	"""Snapshot `env` for stages; its operation attributes only describe effects."""
 	return environmentSnapshot(env)[0]
 
 
@@ -622,7 +622,7 @@ def p(template: Template) -> str:
 
 
 async def run(env: Mapping, stage: object, *inputs: object) -> object:
-	"""Run a generator stage against a validated host environment mapping."""
+	"""Run `stage` using host operations in `env` and a frozen stage-facing snapshot."""
 	state = Run(env)
 	strand = Strand(state)
 	for value in inputs:

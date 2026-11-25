@@ -23,7 +23,9 @@ function captureFields(segment) {
 //
 // -----------------------------------------------------------------------------
 
-/** Enumerate located occurrences with enclosing captures. */
+/** Enumerate located occurrences, carrying captures from enclosing selector segments.
+ * `*` visits list items; `{field:$slot}` captures fields without descending.
+ */
 export function matches(value, selector) {
 	const segments = selector ? selector.split("/") : [], result = [];
 	function visit(item, index, path, captures) {

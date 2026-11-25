@@ -76,6 +76,7 @@ export function memberName(value) {
 	return Symbol.keyFor(value)?.replace(/^member:/, "") ?? value.description;
 }
 
+/** Intern and register the member named `name`. */
 export function member(name) {
 	const result = Symbol.for(`member:${name}`);
 	if (REGISTRY.has(name) && REGISTRY.get(name) !== result) throw new Failure(Failure.Defect, Runtime.NameRedeclared);
@@ -111,6 +112,7 @@ export function clone(value) {
 	return value;
 }
 
+/** Freeze arrays and plain objects recursively through enumerable string-keyed values. */
 export function freeze(value) {
 	if (Array.isArray(value) || isPlain(value)) {
 		for (const child of Object.values(value)) freeze(child);
@@ -177,6 +179,7 @@ export function validateData(value, { maxDepth = LIMITS.maxDepth, maxNodes = LIM
 	visit(value, 0);
 }
 
+/** Register `value` under `name`, returning the existing equal declaration if present. */
 export function register(name, value) {
 	if (!REGISTRY.has(name)) REGISTRY.set(name, value);
 	else if (REGISTRY.get(name) !== value && !jsonEqual(REGISTRY.get(name), value)) throw new Failure(Failure.Defect, Runtime.NameRedeclared);
@@ -231,6 +234,7 @@ export function failureData(failure, { detail = false } = {}) {
 	return result;
 }
 
+/** Restore a failure from its serialized `data`. */
 export function failureFromData(data) {
 	if (!Object.hasOwn(Failure, data.kind) || !isMember(REGISTRY.get(data.code))) throw new Failure(Failure.Defect, Runtime.ReplayMismatch);
 	const result = new Failure(Failure[data.kind], REGISTRY.get(data.code), data);

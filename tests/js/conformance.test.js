@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { encode, decode } from "hexa/shapes.js";
 import { pipe, select } from "hexa/combinators.js";
 import { inert, run } from "hexa/runtime.js";
-import * as Example from "../../examples/mortgage-people/people_extract.js";
+import * as Example from "../../examples/mortgage-people/people/extract.js";
 
 const fixture = async name => JSON.parse(await readFile(new URL(`../../examples/mortgage-people/fixtures/${name}.json`, import.meta.url), "utf8"));
 

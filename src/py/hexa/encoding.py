@@ -29,19 +29,19 @@ UNARY_OPERATORS = {"$pattern": pattern, "$tolerant": tolerant, "$gather": gather
 #
 # -----------------------------------------------------------------------------
 
-def escapeKey(key):
+def escapeKey(key: str) -> str:
 	"""Escape a `$`-prefixed key or string as verbatim, `$$`."""
 	return "$" + key if key.startswith("$") else key
 
 
-def encodeKey(key, optional):
-	"""A struct key, `?` marking an optional one. A `$` key is escaped verbatim and a verbatim key is never optional."""
+def encodeKey(key: str, optional: bool) -> str:
+	"""Encode a struct key; optional keys cannot start with `$`."""
 	if optional and key.startswith("$"):
 		raise TypeError("an optional key cannot start with '$'")
 	return escapeKey(key) + ("?" if optional else "")
 
 
-def encodeMappingKey(key):
+def encodeMappingKey(key: str) -> str:
 	"""A plain mapping's key, a trailing `?` marking an optional one, as `encodeKey` spells it."""
 	return encodeKey(key[:-1], True) if key.endswith("?") else encodeKey(key, False)
 
@@ -293,7 +293,7 @@ def decode(value: object, profile: ProfileDefinition | None = None, *, registry:
 
 
 def describe(profile: ProfileDefinition) -> dict:
-	"""Describe exactly the vocabulary `profile` permits, as data for `CatalogDescribe`."""
+	"""Describe the declared vocabulary of `profile` as catalog data."""
 	if not isinstance(profile, ProfileDefinition):
 		raise TypeError("profile must be a declared profile")
 	slots = {}

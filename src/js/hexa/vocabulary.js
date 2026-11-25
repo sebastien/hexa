@@ -20,6 +20,7 @@ function decimalParse(value) {
 	if (!found || found[0] !== value) throw new Gap(DecimalText.Invalid);
 	const [, sign, whole, fraction = "", exponent = "0"] = found;
 	const shift = Number(exponent) - fraction.length;
+	// Bound expansion before allocating zero padding for an exponent.
 	if (!Number.isSafeInteger(shift) || Math.abs(shift) > 100000) throw new Gap(DecimalText.Invalid);
 	let digits = (whole + fraction).replace(/^0+/, "") || "0";
 	if (digits === "0") return "0";
@@ -37,6 +38,7 @@ function instantParse(value) {
 	const [seconds = "00", fraction = ""] = time.slice(6).split(".");
 	if (fraction.replace(/0+$/, "").length > 9) throw new Gap(InstantOffset.Invalid);
 	const offset = zone === "Z" ? 0 : (+zone.slice(1, 3) * 60 + +zone.slice(4)) * (zone[0] === "-" ? -1 : 1);
+	// Normalize in minutes, then carry across calendar boundaries.
 	const total = +time.slice(0, 2) * 60 + +time.slice(3, 5) - offset;
 	day += Math.floor(total / 1440);
 	const minutes = ((total % 1440) + 1440) % 1440;
@@ -68,6 +70,7 @@ function datePatternRegex(pattern) {
 //
 // -----------------------------------------------------------------------------
 
+// Standard constraints and provenance slots.
 export const DateOnly = where(value => dateParts(value)?.time === null, "DateOnly");
 export const Timed = where(value => Boolean(dateParts(value)?.time), "Timed");
 export const Zoned = where(value => Boolean(dateParts(value)?.zone), "Zoned");
@@ -75,6 +78,7 @@ export const Positive = where(value => typeof value === "number" && value > 0, "
 export const Nonempty = where(value => value != null && (typeof value === "string" || Array.isArray(value) ? value.length > 0 : typeof value === "object" && Object.keys(value).length > 0), "Nonempty");
 export const Location = slot("Location", Text);
 export const Origin = slot("Origin", { strand: Text, seq: Int, pointer: Text });
+// Date decomposition and canonical text codecs.
 export const parts = transform("parts", dateParts, { inputs: [DateTime], output: { date: Text, time: nullable(Text), zone: nullable(Text) }, examples: [{ input: ["2026-11-10"], output: { date: "2026-11-10", time: null, zone: null } }] });
 export const DecimalText = codec("DecimalText", { source: either(Text, Num), canonical: Decimal, parse: decimalParse, format: value => value, gaps: ["Invalid"], examples: [{ input: "1.2500e3", output: "1250", direction: "forward" }] });
 export const InstantOffset = codec("InstantOffset", { source: refine(DateTime, Zoned), canonical: Instant, parse: instantParse, format: value => value, gaps: ["Invalid"], losses: ["Discarded"], examples: [{ input: "2026-11-10T14:00+13:00", output: "2026-11-10T01:00:00Z", direction: "forward" }] });

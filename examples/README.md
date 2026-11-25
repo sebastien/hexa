@@ -37,7 +37,7 @@ PeopleExtract: MortgageRetrieve → MortgageValidate → MortgageClientsSelect �
 
 | File | Meaning |
 | --- | --- |
-| `people_extract.js`, `people_extract.py` | The same program in each binding, declared as the `People` stage namespace (`stages(S => ({ … }))` in JavaScript, `class People(stages)` in Python), with an inlined `CountryCode` type and `CountryName` table. Python uses its `&`, `@` and `~` operators and keyword options; Python 3.14+ for `p(t"...")` |
+| `people/extract.js`, `people_extract.py` | The same program in each binding, declared as the `People` stage namespace (`stages(S => ({ … }))` in JavaScript, `class People(stages)` in Python), with an inlined `CountryCode` type and `CountryName` table. Python uses its `&`, `@` and `~` operators and keyword options; Python 3.14+ for `p(t"...")` |
 | `fixtures/responses.json` | Host transport fake: request `path` → operation result `{data}`. Not a journal |
 | `fixtures/expected.json` | `{value, ledger}` that `run(env, People.PeopleExtract)` must return in both bindings |
 | `fixtures/journal.json` | A recorded run: replaying it with `env.replay` must also return `expected.json`, without `RequestSend` |

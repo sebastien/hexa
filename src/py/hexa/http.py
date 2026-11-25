@@ -1,6 +1,7 @@
 """Module: hexa.http — `RequestSend` over HTTP for JSON APIs, as a host operation.
 
-	env = {**http("https://api.example/v1", headers={"authorization": "Bearer …"}), "policy": {"retry": {"default": True, "attempts": 3}}}
+	host = {**http("https://api.example/v1", headers={"authorization": "Bearer …"}), "policy": {"retry": {"default": True, "attempts": 3}}}
+	# Within a stage receiving its runtime environment as `env`:
 	response = yield env.RequestSend({"method": "GET", "path": p(t"/clients/{id}"), "query": {"expand": "notes"}})
 
 A failed request is a `Failure.Effect` with a `Request` code, transient when a retry may succeed; its message
@@ -122,11 +123,12 @@ def http(base: str | None = None, *, apis: Mapping[str, str] | None = None, head
 	- `base`: the API's URL; `apis` names further APIs, which a request selects with `api`;
 	- `headers`: sent with every request (a request's own `headers` override them);
 	- `transport`: sends a request, plain (run in a thread) or `async`; the default uses `urllib` (see `urllibTransport`);
-	- `timeout`: milliseconds before a request fails as `Request.Timeout`, whatever the transport does.
+	- `timeout`: milliseconds until the request wait times out as `Request.Timeout`, or `None` for no deadline.
 
 	A `Failure` the transport raises passes through; any other error is `Request.Network` (`Request.Timeout` for a timeout).
 
-	Cancelling the run cancels an `async` transport; a plain one's thread runs on, at most until `timeout`.
+	Cancelling or timing out cancels an `async` transport; a plain one's thread may continue indefinitely
+	if the transport does not honor the timeout passed to it.
 
 	A request is `{method="GET", path, api?, query?, headers?, body?}`, `path` starting with `/` (build it with `p`);
 	`body` is sent as JSON. The result is `{status, data}`: `data` is the parsed JSON body, the text of a non-JSON one,

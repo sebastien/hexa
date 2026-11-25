@@ -1,6 +1,6 @@
 /** Module: hexa.instructions — Inert instruction records, distinct from plain data. */
 
-import { ABSENT, clone, freeze, normalise, validateData } from "./core.js";
+import { ABSENT, clone, freeze, isPlain, normalise, validateData } from "./core.js";
 import { asStage } from "./stage.js";
 
 // -----------------------------------------------------------------------------
@@ -9,6 +9,7 @@ import { asStage } from "./stage.js";
 //
 // -----------------------------------------------------------------------------
 
+/** A host operation with detached, immutable data arguments. */
 export class Effect {
 	constructor(operation, args) {
 		validateData(args);
@@ -16,20 +17,30 @@ export class Effect {
 		Object.freeze(this);
 	}
 }
+/** A ledger entry to be validated and recorded by the runtime. */
 export class Report {
 	constructor(kind, { target, reason, source = ABSENT, path = ABSENT, fatal = false }) {
 		Object.assign(this, { kind, target, reason, source, path, fatal });
 		Object.freeze(this);
 	}
 }
+/** Request a snapshot of the current strand's ledger. */
 export class LedgerRead {}
+/** Concurrent items, with a shallow copy of their list or struct container. */
 export class Join {
-	constructor(items) { this.items = Array.isArray(items) ? items.slice() : { ...items }; Object.freeze(this); }
+	constructor(items) {
+		if (!Array.isArray(items) && !isPlain(items)) throw new TypeError("join/race requires list or struct");
+		this.items = Array.isArray(items) ? items.slice() : { ...items };
+		Object.freeze(this);
+	}
 }
+/** Concurrent alternatives whose first completion determines the outcome. */
 export class Race extends Join {}
+/** A child stage and its inputs, to be joined by its owner. */
 export class Fork {
 	constructor(stage, inputs) { Object.assign(this, { stage: asStage(stage), inputs }); Object.freeze(this); }
 }
+/** A stage to run over values with bounded concurrency. */
 export class Parallel {
 	constructor(stage, values) { Object.assign(this, { stage, values }); Object.freeze(this); }
 }

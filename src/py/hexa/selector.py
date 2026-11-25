@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .core import Failure, Gap, Issue, pointer, unescapeSegment
-from .shape import SLOTS, Captures, capture, loose, mergeCaptures
+from .shape import SLOTS, Captures, Shape, capture, loose, mergeCaptures
 
 # -----------------------------------------------------------------------------
 #
@@ -19,7 +19,7 @@ __all__ = ["matches"]
 #
 # -----------------------------------------------------------------------------
 
-def captureFields(segment):
+def captureFields(segment: str) -> Shape:
 	"""Parse a `{key:$Slot,...}` selector segment into a loose capture shape."""
 	fields = {}
 	for item in segment[1:-1].split(","):
@@ -37,7 +37,11 @@ def captureFields(segment):
 # -----------------------------------------------------------------------------
 
 def matches(value: object, selector: str) -> list[dict]:
-	"""Enumerate located occurrences, including enclosing capture blocks."""
+	"""Enumerate values and JSON-pointer locations, with enclosing captures.
+
+	`*` traverses lists; capture blocks match the current value. Missing or
+	mismatched paths raise `Gap`.
+	"""
 	segments = selector.split("/") if selector else []
 	result = []
 

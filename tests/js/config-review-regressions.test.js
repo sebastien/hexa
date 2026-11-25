@@ -1,4 +1,4 @@
-/** Module: config_review_regressions.test — Configuration boundary regressions. */
+/** Module: config-review-regressions.test — Configuration boundary regressions. */
 
 import { expect, test } from "bun:test";
 
@@ -81,7 +81,7 @@ test("generic profiles do not register the concrete selection format", () => {
 		await import("./src/js/hexa/profile.js");
 		const { REGISTRY } = await import("./src/js/hexa/core.js");
 		if (REGISTRY.has("SelectionRequest")) throw new Error("eager selection registration");
-		const { SelectionRequest } = await import("./src/js/hexa/selection_request.js");
+		const { SelectionRequest } = await import("./src/js/hexa/selection/request.js");
 		const shapes = await import("./src/js/hexa/shapes.js");
 		if (shapes.SelectionRequest !== SelectionRequest || REGISTRY.get("SelectionRequest") !== SelectionRequest) throw new Error("missing registration");
 	`], { cwd: process.cwd() });

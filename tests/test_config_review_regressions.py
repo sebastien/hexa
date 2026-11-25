@@ -62,7 +62,7 @@ import importlib
 from hexa.core import REGISTRY
 importlib.import_module("hexa.profile")
 assert "SelectionRequest" not in REGISTRY
-selection = importlib.import_module("hexa.selection_request")
+selection = importlib.import_module("hexa.selectionrequest")
 shapes = importlib.import_module("hexa.shapes")
 assert shapes.SelectionRequest is selection.SelectionRequest
 assert REGISTRY["SelectionRequest"] is selection.SelectionRequest
@@ -70,7 +70,8 @@ assert REGISTRY["SelectionRequest"] is selection.SelectionRequest
 		self.assertEqual(result.returncode, 0, result.stderr)
 
 	def test_implicit_catalog_path_stops_at_first_missing_link(self):
-		entry = lambda step: {"correspondences": [{"resolved": True, "supplier": step}]}
+		def entry(step):
+			return {"correspondences": [{"resolved": True, "supplier": step}]}
 		catalog = {"steps": {"Root": {}, "Leaf": {}}, "relations": {"Group": entry("Root"), "Member": {}},
 			"entitySets": {"People": {"type": "Person", "attributes": {"Name": {**entry("Leaf"), "via": ["Group", "Member"]}}}}}
 		options = {**OPTIONS, "entitySets": {"People": ["Name"]}, "relations": []}

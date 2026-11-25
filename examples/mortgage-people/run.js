@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 
 import { run } from "hexa/runtime.js";
-import { People, peopleExtractEnvironment } from "./people_extract.js";
+import { People, peopleExtractEnvironment } from "./people/extract.js";
 
 const responses = JSON.parse(await readFile(new URL("./fixtures/responses.json", import.meta.url), "utf8"));
 console.log(JSON.stringify(await run(peopleExtractEnvironment(responses), People.PeopleExtract), null, 2));

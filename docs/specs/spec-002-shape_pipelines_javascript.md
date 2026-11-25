@@ -23,7 +23,7 @@ without it.
 | `http.js` | `http` (the `RequestSend` operation over `fetch`), `Request` |
 
 `shapes.js` is a façade over `shape` (algebra and matching), `template`, `codec`,
-`selector`, `encoding`, `profile`, `selection_request` (the concrete selection
+`selector`, `encoding`, `profile`, `selection/request` (the concrete selection
 format) and `vocabulary`. `combinators` and `runtime` build on `stage` and
 `instructions`; shared declaration identity and reason helpers live in `core`.
 Programs import only the three public modules; hosts also import `hexa/http.js`

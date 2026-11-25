@@ -9,7 +9,9 @@ import { check, compileShape, errors } from "./shape.js";
 //
 // -----------------------------------------------------------------------------
 
+/** Stage metadata is kept off the callable itself. */
 export const STAGES = new WeakMap();
+/** Associates a stage-facing environment with its runtime strand. */
 export const ENV_STRANDS = new WeakMap();
 
 // -----------------------------------------------------------------------------
@@ -26,6 +28,7 @@ export function createStage(fn, combinator = "", details = {}) {
 		const labels = [metadata.name, metadata.combinator !== metadata.name ? metadata.combinator : null].filter(Boolean);
 		strand?.stack.push(...labels);
 		try {
+			// The outermost stage checks its input even when contract checks are off.
 			const boundary = strand && strand.stack.length === labels.length;
 			const checks = env.policy?.contracts ?? Checks.Boundary;
 			if (metadata.explicit && metadata.input && (boundary || checks !== Checks.Off)) check(inputs, metadata.input, Issue.Mismatch);
@@ -47,12 +50,14 @@ export function createStage(fn, combinator = "", details = {}) {
 	return result;
 }
 
+/** Return a registered stage, wrapping an unregistered generator function. */
 export function asStage(value) {
 	if (STAGES.has(value)) return value;
 	if (typeof value !== "function" || value.constructor.name !== "GeneratorFunction") throw new TypeError("stages must be generators; use lift");
 	return createStage(value, "", { name: value.name });
 }
 
+/** Bind and register a stage under `name`; an existing name cannot change. */
 export function bindStage(value, name) {
 	const stage = asStage(value), metadata = STAGES.get(stage);
 	if (metadata.name && metadata.name !== name) throw new Failure(Failure.Defect, Runtime.StageRenamed);

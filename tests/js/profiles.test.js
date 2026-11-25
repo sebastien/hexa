@@ -40,8 +40,8 @@ function refused(value) {
 	catch (error) { return error; }
 	throw new Error("expected refusal");
 }
-function prepare(value, policy = {}) {
-	return run({ policy: { profile: Caller, ...policy }, vocabulary: { SelectionRequest: CATALOG } }, pipe(validate(SelectionRequest), plan(SelectionRequest)), value);
+function prepare(value, policy = {}, catalog = CATALOG) {
+	return run({ policy: { profile: Caller, ...policy }, vocabulary: { SelectionRequest: catalog } }, pipe(validate(SelectionRequest), plan(SelectionRequest)), value);
 }
 async function failure(promise) {
 	try { await promise; }
@@ -112,6 +112,27 @@ test("selection requests compile dependencies, capabilities and plan gaps", asyn
 	expect(result.request.relations[0].participants).toEqual({ source: ["Home"], target: ["People"] });
 	expect(result.budgets.maxGaps).toBe(1000);
 	expect(await prepare(request)).toEqual(result);
+});
+
+test("selection plans retain catalog order while adding transitive dependencies", async () => {
+	const catalog = { ...CATALOG, steps: {
+		ClientsRetrieve: { capability: "client_read", requires: ["Middle", "MortgageRetrieve"] },
+		Independent: { capability: "independent_read" },
+		Middle: { capability: "middle_read", requires: ["MortgageRetrieve"] },
+		MortgageRetrieve: { capability: "mortgage_read" },
+		Unused: { requires: ["Unused"] },
+	}, entitySets: { ...CATALOG.entitySets, Clients: { ...CATALOG.entitySets.Clients, requires: ["Independent"] } } };
+	const request = { version: 1, selections: { People: { from: "Clients", attributes: ["GivenNames"] } } };
+	const result = await prepare(request, {}, catalog);
+	expect(result.steps).toEqual(["ClientsRetrieve", "Independent", "Middle", "MortgageRetrieve"].map(step => ({ step })));
+	expect(result.allow).toEqual(["client_read", "independent_read", "middle_read", "mortgage_read"]);
+});
+
+test("selection plans reject missing dependencies as defects", async () => {
+	const request = { version: 1, selections: { People: { from: "Clients", attributes: ["GivenNames"] } } };
+	const steps = { ClientsRetrieve: { requires: ["Missing"] }, MortgageRetrieve: {} };
+	const result = await failure(prepare(request, {}, { ...CATALOG, steps }));
+	expect([result.kind, result.code]).toEqual([Failure.Defect, Issue.Missing]);
 });
 
 test("unselected reference targets become explicit plan gaps", async () => {

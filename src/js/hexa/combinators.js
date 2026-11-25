@@ -58,6 +58,7 @@ function validateOptions(options) {
 function* applyPolicy(env, source, inputs, policy, options, allowDrop = false) {
 	try { return yield* source(env, ...inputs); }
 	catch (failure) {
+		// Fatal and exhausted failures cannot be recovered by an outer policy.
 		if (!(failure instanceof Failure) || !RECOVERABLE.includes(failure.kind) || !(options.on ?? [Failure.Shape, Failure.Gap]).includes(failure.kind) || failure.fatal || failure.exhausted) throw failure;
 		const reason = typeof options.reason === "function" ? options.reason(failure) : options.reason ?? failure.code;
 		const fields = { target: reportTarget(env, options.target), reason };
@@ -99,6 +100,7 @@ export function stages(declare) {
 	let resolved;
 	const references = new Proxy({}, {
 		get(target, key) {
+			// Do not let promise or serialization probes create late references.
 			if (typeof key === "symbol" || ["then", "toJSON", "constructor"].includes(key)) return undefined;
 			if (resolved) return resolved[key];
 			if (!requested.has(key)) {
@@ -232,6 +234,7 @@ export function collect(source) {
 		const before = yield new LedgerRead();
 		const value = yield* source(env, ...inputs);
 		const after = yield new LedgerRead();
+		// Ledger entries are deduplicated; compare values rather than snapshot identity.
 		return { value, ledger: after.filter(entry => !before.some(previous => jsonEqual(previous, entry))) };
 	}, "collect", { input: STAGES.get(source).input });
 }
@@ -277,6 +280,7 @@ export function retry(source, { attempts, delay } = {}) {
 	return createStage(function* (env, ...inputs) {
 		const strand = ENV_STRANDS.get(env), limit = attempts ?? env.policy.retry.attempts, wait = delay ?? env.policy.retry.delay ?? DEFAULT_DELAY;
 		if (!Number.isInteger(limit) || limit < 1 || limit > env.policy.maxAttempts) throw new Failure(Failure.Budget, Issue.Constraint);
+		// Nested retries restore their caller's attempt and suppress default effect retries.
 		const previous = [strand.retryDepth, strand.attempt];
 		strand.retryDepth++;
 		try {

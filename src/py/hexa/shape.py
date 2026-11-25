@@ -161,7 +161,8 @@ class Codec:
 	def __getattr__(self, name):
 		return reasonNamed(self.gaps + self.losses, name)
 
-	def convert(self, value, *, formatting=False, original=None):
+	def convert(self, value: object, *, formatting: bool = False, original: object = None) -> object:
+		"""Parse or format `value`, checking shapes and declared gaps and losses."""
 		expected = self.canonical if formatting else self.source
 		if errors(value, expected):
 			raise Failure(Failure.Defect, Issue.Mismatch)
@@ -205,7 +206,8 @@ class CodecFamily:
 	def __getattr__(self, name):
 		return reasonNamed(self.gaps + self.losses, name)
 
-	def __call__(self, *arguments):
+	def __call__(self, *arguments: object) -> Codec:
+		"""Return the cached codec instance for validated `arguments`."""
 		if len(arguments) != len(self.params):
 			raise TypeError("codec arguments do not match parameters")
 		for value, (_, shape) in zip(arguments, self.params):
@@ -255,7 +257,7 @@ def checkOutput(value):
 		raise Failure(Failure.Defect, failure.code) from failure
 
 
-def compatible(source, target):
+def compatible(source: Shape, target: Shape) -> bool:
 	"""Check the structural subset needed for static codec/derivation signatures."""
 	if target == Any or source == target:
 		return True
@@ -285,7 +287,8 @@ def compatible(source, target):
 	return False
 
 
-def dateParts(value):
+def dateParts(value: object) -> dict[str, str | None] | None:
+	"""Split a valid date or date-time string into date, time and zone."""
 	if not isinstance(value, str) or not (found := DATE_RE.fullmatch(value)):
 		return None
 	dateText, timeText, zone = found.groups()
@@ -302,7 +305,8 @@ def dateParts(value):
 	return {"date": dateText, "time": timeText, "zone": zone}
 
 
-def typeMatches(value, name):
+def typeMatches(value: object, name: str) -> bool:
+	"""Test whether `value` matches the named built-in shape."""
 	if name == "Any":
 		try:
 			validateData(value)
@@ -338,7 +342,8 @@ def isCollectionSlot(shape):
 	return shape.kind in ("slot", "via") and shape.args[0].shape.kind == "list"
 
 
-def compileShape(value):
+def compileShape(value: object) -> Shape:
+	"""Compile a shape shorthand, slot, literal or existing shape."""
 	if isinstance(value, Shape):
 		return value
 	if isinstance(value, Slot):
@@ -828,7 +833,7 @@ def lossy(value: object, reason: Member) -> Lossy:
 
 
 def errors(value: object, shape: object) -> list[dict]:
-	"""Return all structural issues without including source values."""
+	"""Return matching issues without source values; codec gaps can propagate."""
 	compiled = compileShape(shape)
 	validateShape(compiled)
 	issues = []

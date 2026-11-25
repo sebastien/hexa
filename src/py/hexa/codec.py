@@ -60,8 +60,11 @@ def tableFunctions(table, gaps, source, canonical, reasons):
 #
 # -----------------------------------------------------------------------------
 
-def codec(name, *, source, canonical, parse=None, format=None, map=None, gaps=(), losses=(), params=None, examples=()):
-	"""Declare a table or pure code codec, optionally parameterised."""
+def codec(name: str, *, source: object, canonical: object, parse=None, format=None, map=None, gaps=(), losses=(), params=None, examples=()) -> Codec | CodecFamily:
+	"""Declare a table or code codec; nonempty `params` creates a codec family.
+
+	Table mappings associate canonical strings with source strings or alternatives.
+	"""
 	source, canonical = compileShape(source), compileShape(canonical)
 	if map is not None and gaps == ():
 		gaps = {}

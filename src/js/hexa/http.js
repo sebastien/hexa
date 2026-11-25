@@ -5,7 +5,8 @@
  *   const { status, data } = yield env.RequestSend({ method: "GET", path: p`/clients/${id}`, query: { expand: "notes" } });
  *
  * A failed request is a `Failure.Effect` with a `Request` code, transient when a retry may succeed; its
- * message (method, URL, status and the start of the body) is the failure's cause, which the journal keeps.
+ * message (method, full URL, status and the start of the body) is the failure's cause, which the journal keeps.
+ * URLs, query strings and response bodies may contain sensitive information; protect journal storage accordingly.
  */
 
 import { Failure, Issue, isPlain } from "./core.js";
@@ -17,6 +18,7 @@ import { codes } from "./shape.js";
 //
 // -----------------------------------------------------------------------------
 
+/** Failure codes emitted by the HTTP host operation. */
 export const Request = codes("Request", "BadRequest", "Unauthorized", "Forbidden", "NotFound", "Conflict", "Gone", "Rejected",
 	"TooManyRequests", "ServerError", "Unavailable", "Timeout", "Network", "Unreadable");
 
@@ -62,8 +64,8 @@ function prepare(request, bases, defaults) {
 	for (const [key, value] of Object.entries(query)) for (const item of [value].flat()) search.append(key, String(item));
 	const encoded = search.toString();
 	const url = base.replace(/\/+$/, "") + path + (encoded ? (path.includes("?") ? "&" : "?") + encoded : "");
-	const sent = { accept: "application/json", ...defaults, ...headers };
-	if (body !== undefined && !Object.keys(sent).some(key => key.toLowerCase() === "content-type")) sent["content-type"] = "application/json";
+	const sent = Object.fromEntries(Object.entries({ accept: "application/json", ...defaults }).concat(Object.entries(headers)).map(([key, value]) => [key.toLowerCase(), value]));
+	if (body !== undefined && !("content-type" in sent)) sent["content-type"] = "application/json";
 	return { method, url, init: { method, headers: sent, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) } };
 }
 
@@ -77,7 +79,7 @@ function prepare(request, bases, defaults) {
  * Operations for an environment: `{ RequestSend }`.
  *
  * - `base`: the API's URL; `apis` names further APIs, which a request selects with `api`;
- * - `headers`: sent with every request (a request's own `headers` override them);
+ * - `headers`: sent with every request (a request's own `headers` override them, case-insensitively);
  * - `fetch`: a WHATWG `fetch`, e.g. one that adds OAuth credentials (default `globalThis.fetch`);
  * - `timeout`: milliseconds before a request fails as `Request.Timeout`.
  *
@@ -103,6 +105,7 @@ export function http({ base, apis = {}, headers = {}, fetch = globalThis.fetch, 
 				response = await fetch(url, { ...init, signal: controller.signal });
 				text = await response.text();
 			} catch (error) {
+				// Parent cancellation takes precedence over the local timeout classification.
 				if (signal?.aborted || error instanceof Failure) throw error;
 				if (timedOut) throw requestFailure(Request.Timeout, true, method, url, `no response within ${timeout} ms`);
 				throw requestFailure(Request.Network, true, method, url, String(error?.message ?? error), error);

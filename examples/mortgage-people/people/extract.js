@@ -1,4 +1,4 @@
-/** Module: people_extract — Project mortgage clients into person records. */
+/** Module: people.extract — Project mortgage clients into person records. */
 
 import { Any, Text, Int, DateTime, DateOnly, Positive, Null, loose, either, refine, slots, codes, optional, via, codec, Location } from "hexa/shapes.js";
 import { stages, pipe, guard, select, each, project, collect, Policy } from "hexa/combinators.js";

@@ -22,7 +22,7 @@ as domain languages, may load it lazily and stay usable without it.
 | `http.py` | `http` (the `RequestSend` operation over `urllib`, or a host `transport`), `Request` |
 
 `shapes.py` is a façade over the internal modules `shape` (algebra and matching),
-`template`, `codec`, `selector`, `encoding`, `profile`, `selection_request` (the
+`template`, `codec`, `selector`, `encoding`, `profile`, `selectionrequest` (the
 concrete selection format) and `vocabulary`; `combinators.py` and `runtime.py`
 build on `stage` and `instructions`. Shared declaration identity and reason
 helpers live in `core`. Programs import only the three public modules; hosts

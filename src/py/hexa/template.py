@@ -38,7 +38,8 @@ class Transform:
 #
 # -----------------------------------------------------------------------------
 
-def parameterShapes(parameters, count):
+def parameterShapes(parameters: tuple[Shape, ...], count: int) -> tuple[Shape, ...]:
+	"""Expand a trailing rest parameter to match `count` arguments."""
 	if parameters and parameters[-1].kind == "rest":
 		if count < len(parameters) - 1:
 			raise TypeError("too few derivation arguments")
@@ -48,7 +49,8 @@ def parameterShapes(parameters, count):
 	return parameters
 
 
-def compileTemplate(value):
+def compileTemplate(value: object) -> Shape:
+	"""Compile template shorthand, treating lists as tuples or collection slots."""
 	if isinstance(value, dict):
 		return Shape("struct", tuple((key[:-1] if key.endswith("?") else key, key.endswith("?"), compileTemplate(item)) for key, item in value.items()))
 	if isinstance(value, list):
@@ -156,7 +158,7 @@ def expandTemplate(shape, captures, holes, path=(), quiet=False):
 	raise TypeError("shape is not a template")
 
 
-def outputShape(template):
+def outputShape(template: Shape) -> Shape:
 	"""Derive the shape of values that expanding `template` produces."""
 	if template.kind in ("slot", "optional"):
 		return template.args[0].shape
@@ -182,8 +184,8 @@ def outputShape(template):
 #
 # -----------------------------------------------------------------------------
 
-def transform(name, function, *, inputs, output, gaps=(), examples=()):
-	"""Register a pure derivation with checked input and output shapes."""
+def transform(name: str, function: object, *, inputs, output: object, gaps=(), examples=()) -> Transform:
+	"""Register a derivation with checked shapes and declared `gaps`."""
 	if not callable(function):
 		raise TypeError("transforms require a callable")
 	parameters = []
@@ -217,7 +219,7 @@ def derive(transform: Transform, *arguments: object) -> Shape:
 
 
 def expand(template: object, captures: dict) -> tuple[object, list[dict]]:
-	"""Return a detached value and reason-bearing holes at template paths."""
+	"""Return a detached value and holes; raise `Gap` if the root is absent."""
 	holes = []
 	result = expandTemplate(compileTemplate(template), asCaptures(captures), holes)
 	if result is ABSENT:

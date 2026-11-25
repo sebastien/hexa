@@ -31,6 +31,7 @@ export class Slot {
 	}
 }
 
+/** Named predicate applied after structural matching. */
 export class Constraint {
 	constructor(name, predicate) {
 		Object.assign(this, { name, predicate });
@@ -38,6 +39,7 @@ export class Constraint {
 	}
 }
 
+/** Conversion result carrying a declared loss reason. */
 export class Lossy {
 	constructor(value, reason) {
 		Object.assign(this, { value, reason });
@@ -57,6 +59,7 @@ export class Codec {
 		Object.assign(this, definition);
 	}
 
+	/** Parse or format `value`, checking callback results against the codec contract. */
 	convert(value, { formatting = false, original } = {}) {
 		if (errors(value, formatting ? this.canonical : this.source).length) throw new Failure(Failure.Defect, Issue.Mismatch);
 		let result;
@@ -91,6 +94,7 @@ export function captureState(captures) {
 	return CAPTURES.get(captures);
 }
 
+/** Copy captures and their private evidence for an isolated matching attempt. */
 export function copyCaptures(captures) {
 	const result = new Captures(), state = captureState(captures);
 	for (const key of Reflect.ownKeys(captures)) result[key] = clone(captures[key]);
@@ -150,6 +154,7 @@ export function typeMatches(value, name) {
 	}
 }
 
+/** Return whether the source shape is accepted by the target shape. */
 export function compatible(source, target) {
 	if (target.kind === "type" && target.args[0] === "Any" || jsonEqual(source, target)) return true;
 	if (source.kind === "literal") return errors(source.args[0], target).length === 0;
@@ -211,6 +216,7 @@ export function references(shape) {
 	return result;
 }
 
+/** Return references present in every alternative of `shape`. */
 export function definiteReferences(shape) {
 	if (shape.kind === "either") {
 		const sets = shape.args.map(definiteReferences);
@@ -344,6 +350,7 @@ function matchTuple(value, shape, captures, issues, path, gathering) {
 function matchEither(value, shape, captures, issues, path, gathering) {
 	const failures = [];
 	for (const child of shape.args) {
+		// Commit only the first successful alternative's captures.
 		const trial = copyCaptures(captures), inner = [];
 		try { matchShape(value, child, trial, inner, path); }
 		catch (error) { if (!(error instanceof Gap)) throw error; failures.push(error); continue; }
@@ -474,6 +481,7 @@ export function slots(name, shapes) {
 	return register(name, namespace(name, Object.fromEntries(Object.entries(shapes).map(([key, value]) => [key, slot(`${name}.${key}`, value)])), Runtime.SlotUnknown));
 }
 
+// TODO: Consider a camelCase tuple constructor in a compatible, cross-binding API revision.
 /** Match fixed positions with at most one variable-length rest. */
 export function Tuple(...shapes) {
 	const result = new Shape("tuple", shapes.map(compileShape));
@@ -483,6 +491,7 @@ export function Tuple(...shapes) {
 
 /** Match zero or more tuple positions against `shape`. */
 export function rest(shape) { return new Shape("rest", [compileShape(shape)]); }
+// TODO: Consider a descriptive alias for `__` in a compatible, cross-binding API revision.
 export const __ = rest(Any);
 /** Match declared fields while allowing additional keys. */
 export function loose(shape) {

@@ -9,6 +9,7 @@ are the combinators `validate` and `plan`.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -55,7 +56,7 @@ class ProfileDefinition:
 	budgets: tuple = ()
 
 	@property
-	def limits(self):
+	def limits(self) -> dict:
 		"""Return the effective data-only budgets, defaulting to the library limits."""
 		return {**LIMITS, **dict(self.budgets)}
 
@@ -66,7 +67,7 @@ class ProfileDefinition:
 				return thaw(options)
 		return None
 
-	def permits(self, value):
+	def permits(self, value: object) -> bool:
 		"""Tell whether a resolved registered term may be referenced by a caller."""
 		if isinstance(value, Slot):
 			namespace = value.name.rpartition(".")[0]
@@ -98,14 +99,15 @@ class RequestFormat:
 	name: str
 	versions: tuple
 	options: Shape
-	validate: object
-	compile: object
+	validate: Callable
+	compile: Callable
 	gaps: tuple = ()
 
 	def __getattr__(self, name):
 		return reasonNamed(self.gaps, name)
 
-	def encoded(self):
+	def encoded(self) -> str:
+		"""Return the registered format reference."""
 		return "$" + self.name
 
 	def checkOptions(self, options):

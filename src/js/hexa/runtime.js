@@ -45,6 +45,7 @@ class Gate {
 	}
 
 	leave() {
+		// Transfer the permit directly to the oldest waiter, or return it to the gate.
 		if (this.waiters.length) this.waiters.shift().resolve();
 		else this.available++;
 	}
@@ -88,6 +89,7 @@ function standIn(snapshot, strand) {
 }
 
 function entryIdentity(entry) {
+	// Fatality can be promoted when equivalent ledger entries are merged.
 	function sorted(value) {
 		if (Array.isArray(value)) return value.map(sorted);
 		if (isPlain(value)) return Object.fromEntries(Object.keys(value).sort().filter(key => key !== "fatal").map(key => [key, sorted(value[key])]));
@@ -269,6 +271,7 @@ class Strand {
 			this.closing = true;
 			let closeFailure;
 			try {
+				// Closing a generator must not introduce new runtime work.
 				if (!iterator.return().done) closeFailure = new Failure(Failure.Defect, Runtime.CloseYielded);
 			} finally {
 				const pending = this.handles.filter(handle => !handle.joined);
@@ -333,6 +336,7 @@ class Strand {
 
 	async effect(value) {
 		const defaults = this.run.policy.retry;
+		// Explicit stage retries own the attempt count; do not multiply them here.
 		if (!defaults.default || this.retryDepth || value.operation === "DelayWait") return this.effectOnce(value, this.retryDepth ? this.attempt : 1);
 		for (let attempt = 1; attempt <= defaults.attempts; attempt++) {
 			try { return await this.effectOnce(value, attempt); }
@@ -466,6 +470,7 @@ class Strand {
 		if (value instanceof Effect) return this.effect(value);
 		if (value instanceof Report) { this.report(value); return null; }
 		if (value instanceof LedgerRead) return clone(this.entries);
+		// Race extends Join, so dispatch it first.
 		if (value instanceof Race) return this.runItems(value.items, true);
 		if (value instanceof Join) return this.runItems(value.items);
 		if (value instanceof Fork) return this.startFork(value.stage, value.inputs);

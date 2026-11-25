@@ -10,18 +10,24 @@ import { Transform, derive } from "./template.js";
 //
 // -----------------------------------------------------------------------------
 
+/** Map constructor functions to their interchange names. */
 export const CONSTRUCTORS = new Map([[loose, "loose"], [Tuple, "tuple"], [rest, "rest"], [either, "either"], [refine, "refine"], [pattern, "pattern"], [tolerant, "tolerant"], [gather, "gather"], [parsed, "parsed"], [derive, "derive"]]);
+/** Map interchange names back to constructor functions. */
 export const CONSTRUCTOR_NAMES = new Map([...CONSTRUCTORS].map(([fn, name]) => [name, fn]));
 
+/** Defines the vocabulary and budgets allowed to a caller. */
 export class ProfileDefinition {
 	constructor(definition) {
 		Object.assign(this, definition, { profileDefinition: true });
 		Object.freeze(this);
 	}
 
+	/** Return default limits overridden by this profile's budgets. */
 	get limits() { return { ...LIMITS, ...this.budgets }; }
+	/** Return detached options for `format`, or null when it is not permitted. */
 	options(format) { return clone(this.requests.find(([item]) => item === format)?.[1] ?? null); }
 
+	/** Check whether `value` is permitted by this profile. */
 	permits(value) {
 		if (value instanceof Slot) return this.slots.some(item => item === value || Object.values(NAMESPACES.get(item)?.members ?? {}).includes(value));
 		if (value instanceof Shape) return value.kind === "type" ? this.types.includes(value) : this.shapes.some(([, shape]) => shape === value);
@@ -32,8 +38,10 @@ export class ProfileDefinition {
 	}
 }
 
+/** Defines validation and compilation for a request format. */
 export class RequestFormat {
 	constructor(definition) { Object.assign(this, definition); }
+	/** Reject unsupported versions or invalid format `options`. */
 	checkOptions(options) {
 		if (!isPlain(options) || !Array.isArray(options.versions) || !options.versions.length || options.versions.some(item => !Number.isInteger(item) || !this.versions.includes(item))) throw new TypeError("invalid request versions");
 		check(Object.fromEntries(Object.entries(options).filter(([key]) => key !== "versions")), this.options, Issue.Mismatch);
@@ -50,7 +58,9 @@ function registered(value, test) {
 	if (!test(value) || REGISTRY.get(value?.name) !== value) throw new TypeError("profile terms must be registered");
 }
 
-/** Check all permissions before any caller-supplied term is constructed. */
+/** Check all permissions before any caller-supplied term is constructed.
+ * Keep this syntax traversal aligned with the decoder in `encoding.js`.
+ */
 export function permissionIssues(value, definition, catalog = REGISTRY) {
 	const issues = [];
 	const refuse = path => issues.push({ code: Profile.Forbidden, path });
@@ -127,6 +137,7 @@ export function profile(name, { constructors = [], types = [], shapes = {}, slot
 	return register(name, new ProfileDefinition({ name, constructors: freeze(constructors.map(item => CONSTRUCTORS.get(item))), types: freeze([...types]), shapes: freeze(named), slots: freeze([...slots]), constraints: freeze([...constraints]), derivations: freeze([...derivations]), codecs: freeze([...codecs]), requests: freeze(formats), budgets: freeze(clone(budgets)) }));
 }
 
+/** Validate `value` against profile limits, mapping budget failures to `Profile.Exceeded`. */
 export function admitData(value, definition) {
 	try { validateData(value, definition.limits); }
 	catch (error) { if (error instanceof Failure && error.kind === Failure.Budget) throw new Failure(Failure.Budget, Profile.Exceeded); throw error; }

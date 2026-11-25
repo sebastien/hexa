@@ -46,6 +46,12 @@ test("a request reaches the API with its query and headers and returns the statu
 	expect(await run(env, Send, { api: null, path: "/clients/7" })).toMatchObject({ status: 200 });
 });
 
+test("request headers override defaults regardless of casing", async () => {
+	const env = http({ base, headers: { Authorization: "default", "Content-Type": "application/default" } });
+	expect((await run(env, Send, { path: "/clients/7", headers: { authorization: "override" } })).data.auth).toBe("override");
+	expect((await run(env, Send, { method: "POST", path: "/echo", headers: { "content-type": "application/custom" }, body: {} })).data.type).toBe("application/custom");
+});
+
 test("an error status is a coded effect failure whose message the journal keeps and replay restores", async () => {
 	const journal = [];
 	const failure = await failed(run({ ...http({ base }), record: entry => journal.push(entry) }, Send, { path: "/clients/8" }));
@@ -56,6 +62,14 @@ test("an error status is a coded effect failure whose message the journal keeps 
 	expect(JSON.stringify(failure)).not.toContain("no such client");
 	const replayed = await failed(run({ replay: journal }, Send, { path: "/clients/8" }));
 	expect([replayed.code, replayed.cause.message]).toEqual([Request.NotFound, journal[0].failure.detail]);
+});
+
+test("failure causes and journals retain the full URL including its query", async () => {
+	const journal = [];
+	const request = { path: "/clients/8", query: { token: "secret" } };
+	const failure = await failed(run({ ...http({ base }), record: entry => journal.push(entry) }, Send, request));
+	expect(failure.cause.message).toBe(`GET ${base}clients/8?token=secret: 404 Not Found: no such client`);
+	expect(journal[0].failure.detail).toBe(failure.cause.message);
 });
 
 test("a successful run's journal reaches the record sink", async () => {
